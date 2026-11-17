@@ -29,6 +29,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select user from User user where user.login = :login")
     Optional<User> findOneForBudgetCreationByLogin(@Param("login") String login);
 
+    /**
+     * Serializes an owner's configured financial mutations with preference
+     * changes and threshold capture. This is the first lock in the documented
+     * notification lock order.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select user from User user where user.login = :login")
+    Optional<User> findOneForBudgetNotificationMutationByLogin(@Param("login") String login);
+
     @EntityGraph(attributePaths = "authorities")
     Optional<User> findOneWithAuthoritiesByLogin(String login);
 

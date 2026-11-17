@@ -72,6 +72,9 @@ class BudgetCreationServiceTest {
     @Mock
     private CurrentUserService currentUserService;
 
+    @Mock
+    private BudgetTimeZoneService budgetTimeZoneService;
+
     private BudgetCreationService service;
     private User owner;
 
@@ -88,7 +91,8 @@ class BudgetCreationServiceTest {
             tagRepository,
             userRepository,
             currentUserService,
-            CLOCK
+            CLOCK,
+            budgetTimeZoneService
         );
         when(currentUserService.getCurrentUser()).thenReturn(owner);
         when(userRepository.findOneForBudgetCreationByLogin(OWNER_LOGIN)).thenReturn(Optional.of(owner));

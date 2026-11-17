@@ -3,6 +3,7 @@ package com.fintrack.app.service.transfer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.CurrentUserService;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.InternalTransferCounterpartCommand;
 import com.fintrack.app.service.dto.InternalTransferCreateCommand;
 import com.fintrack.app.service.dto.InternalTransferLinkCommand;
@@ -32,6 +34,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,12 +66,18 @@ class InternalTransferCommandServiceTest {
     @Mock
     private EntityManager entityManager;
 
+    @Mock
+    private BudgetThresholdNotificationService budgetThresholdNotificationService;
+
     private InternalTransferCommandService commandService;
     private FinancialAccount sourceAccount;
     private FinancialAccount destinationAccount;
 
     @BeforeEach
     void setUp() {
+        lenient()
+            .when(budgetThresholdNotificationService.capture(any(), any(), any(), any()))
+            .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
         commandService = new InternalTransferCommandService(
             financialAccountRepository,
             financialTransactionRepository,
@@ -77,7 +86,8 @@ class InternalTransferCommandServiceTest {
             tagRepository,
             currentUserService,
             new InternalTransferInvariantService(internalTransferRepository),
-            entityManager
+            entityManager,
+            budgetThresholdNotificationService
         );
 
         User owner = new User();

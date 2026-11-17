@@ -108,6 +108,26 @@ public class BudgetEvaluationService {
         return atDate(new EvaluationContext(budget, timeline, zone, LocalDate.now(clock.withZone(zone))), referenceDate);
     }
 
+    /**
+     * Owner-locked mutation path used by the notification engine. It deliberately reuses the exact same semantic
+     * compiler and executor as the Budget detail view, while taking its date only from the persisted user time zone.
+     */
+    BudgetEvaluationResult evaluateForNotification(Budget budget, ZoneId zone) {
+        if (budget == null || budget.getId() == null || zone == null) {
+            throw invalidPeriod("A Budget and authoritative time zone are required.");
+        }
+        List<BudgetRevisionSchedule> schedules = scheduleRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
+        List<BudgetLifecycleEvent> events = lifecycleEventRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
+        LocalDate today = LocalDate.now(clock.withZone(zone));
+        try {
+            EvaluationContext context = new EvaluationContext(budget, new BudgetTimeline(schedules, events), zone, today);
+            BudgetPeriod period = context.timeline().currentPeriod(today);
+            return evaluate(context, operational(context, period.index()));
+        } catch (IllegalArgumentException exception) {
+            throw invalidPeriod("The Budget's immutable schedule is invalid.");
+        }
+    }
+
     private BudgetEvaluationResult atDate(EvaluationContext context, LocalDate referenceDate) {
         BudgetPeriod period = context
             .timeline()

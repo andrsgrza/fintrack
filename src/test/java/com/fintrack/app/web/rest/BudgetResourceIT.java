@@ -35,6 +35,7 @@ import com.fintrack.app.service.budget.BudgetDeleteCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
 import com.fintrack.app.service.budget.BudgetLifecycleCommand;
 import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
+import com.fintrack.app.service.budget.BudgetNotificationPreferenceUpdateCommand;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
 import com.fintrack.app.service.budget.BudgetVersionedCommand;
 import jakarta.persistence.EntityManager;
@@ -136,6 +137,65 @@ class BudgetResourceIT {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").value(firstId));
         assertThat(budgetRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @Transactional
+    void replacesNotificationPreferencesForTheOwnerAndRejectsForeignOrStaleUpdates() throws Exception {
+        Budget budget = budgetRepository.saveAndFlush(
+            Budget.create(
+                currentUser(),
+                "Notification budget",
+                null,
+                BudgetType.EXPENSE,
+                CurrencyCode.MXN,
+                "notification-preference-api",
+                "notification-preference-api",
+                Instant.now()
+            )
+        );
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/notification-preferences", budget.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.configured").value(false));
+
+        BudgetNotificationPreferenceUpdateCommand create = new BudgetNotificationPreferenceUpdateCommand(
+            null,
+            true,
+            Set.of(new BigDecimal("50.0000"), new BigDecimal("100.0000")),
+            false
+        );
+        restBudgetMockMvc
+            .perform(
+                put("/api/budgets/{id}/notification-preferences", budget.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(create))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.configured").value(true))
+            .andExpect(jsonPath("$.percentageAlertsEnabled").value(true))
+            .andExpect(jsonPath("$.thresholdPercentages.length()").value(2));
+
+        BudgetNotificationPreferenceUpdateCommand stale = new BudgetNotificationPreferenceUpdateCommand(
+            99L,
+            true,
+            Set.of(new BigDecimal("50.0000")),
+            false
+        );
+        restBudgetMockMvc
+            .perform(
+                put("/api/budgets/{id}/notification-preferences", budget.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(stale))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/notification-preferences", budget.getId()).with(user(OTHER_USER_LOGIN)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
     }
 
     @Test

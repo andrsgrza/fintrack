@@ -17,6 +17,9 @@ import com.fintrack.app.service.budget.BudgetHistoryView;
 import com.fintrack.app.service.budget.BudgetLifecycleCommand;
 import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
 import com.fintrack.app.service.budget.BudgetMutationResult;
+import com.fintrack.app.service.budget.BudgetNotificationPreferenceService;
+import com.fintrack.app.service.budget.BudgetNotificationPreferenceUpdateCommand;
+import com.fintrack.app.service.budget.BudgetNotificationPreferenceView;
 import com.fintrack.app.service.budget.BudgetOperationalPeriodView;
 import com.fintrack.app.service.budget.BudgetOverview;
 import com.fintrack.app.service.budget.BudgetOverviewService;
@@ -49,19 +52,22 @@ public class BudgetResource {
     private final BudgetEvaluationService evaluationService;
     private final BudgetCalendarPreviewService calendarPreviewService;
     private final BudgetOverviewService overviewService;
+    private final BudgetNotificationPreferenceService notificationPreferenceService;
 
     public BudgetResource(
         BudgetCreationService creationService,
         BudgetCommandService commandService,
         BudgetEvaluationService evaluationService,
         BudgetCalendarPreviewService calendarPreviewService,
-        BudgetOverviewService overviewService
+        BudgetOverviewService overviewService,
+        BudgetNotificationPreferenceService notificationPreferenceService
     ) {
         this.creationService = creationService;
         this.commandService = commandService;
         this.evaluationService = evaluationService;
         this.calendarPreviewService = calendarPreviewService;
         this.overviewService = overviewService;
+        this.notificationPreferenceService = notificationPreferenceService;
     }
 
     @PostMapping
@@ -202,5 +208,18 @@ public class BudgetResource {
         @RequestParam String timeZone
     ) {
         return ResponseEntity.ok(evaluationService.history(budgetId, firstPeriodIndex, size, timeZone));
+    }
+
+    @GetMapping("/{budgetId}/notification-preferences")
+    public ResponseEntity<BudgetNotificationPreferenceView> notificationPreferences(@PathVariable Long budgetId) {
+        return ResponseEntity.ok(notificationPreferenceService.get(budgetId));
+    }
+
+    @PutMapping("/{budgetId}/notification-preferences")
+    public ResponseEntity<BudgetNotificationPreferenceView> updateNotificationPreferences(
+        @PathVariable Long budgetId,
+        @Valid @RequestBody BudgetNotificationPreferenceUpdateCommand command
+    ) {
+        return ResponseEntity.ok(notificationPreferenceService.update(budgetId, command));
     }
 }

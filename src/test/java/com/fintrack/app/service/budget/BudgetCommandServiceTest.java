@@ -47,6 +47,21 @@ class BudgetCommandServiceTest {
     private BudgetCommandReceiptRepository receiptRepository;
 
     @Mock
+    private BudgetNotificationPreferenceRepository notificationPreferenceRepository;
+
+    @Mock
+    private BudgetThresholdClaimRepository thresholdClaimRepository;
+
+    @Mock
+    private BudgetNotificationOutboxRepository notificationOutboxRepository;
+
+    @Mock
+    private BudgetNotificationRepository notificationRepository;
+
+    @Mock
+    private BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository;
+
+    @Mock
     private FinancialAccountRepository financialAccountRepository;
 
     @Mock
@@ -93,6 +108,11 @@ class BudgetCommandServiceTest {
             scheduleRepository,
             lifecycleEventRepository,
             receiptRepository,
+            notificationPreferenceRepository,
+            thresholdClaimRepository,
+            notificationOutboxRepository,
+            notificationRepository,
+            timeZoneAssignmentRepository,
             financialAccountRepository,
             categoryRepository,
             tagRepository,

@@ -66,6 +66,16 @@ public class User extends AbstractAuditingEntity<Long> implements Serializable {
     @Column(name = "image_url", length = 256)
     private String imageUrl;
 
+    /**
+     * IANA time zone selected for financial features that must continue to run
+     * without an active browser session. A Budget records when a change takes
+     * effect through its own time-zone timeline; this is the user's current
+     * profile preference, not a historical Budget boundary.
+     */
+    @Size(max = 64)
+    @Column(name = "time_zone", length = 64)
+    private String timeZone;
+
     @Size(max = 20)
     @Column(name = "activation_key", length = 20)
     @JsonIgnore
@@ -144,6 +154,14 @@ public class User extends AbstractAuditingEntity<Long> implements Serializable {
 
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
     }
 
     public boolean isActivated() {

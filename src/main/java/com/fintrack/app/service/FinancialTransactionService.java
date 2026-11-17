@@ -16,6 +16,7 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
@@ -91,6 +92,8 @@ public class FinancialTransactionService {
 
     private final InternalTransferCommandService internalTransferCommandService;
 
+    private final BudgetThresholdNotificationService budgetThresholdNotificationService;
+
     public FinancialTransactionService(
         FinancialTransactionRepository financialTransactionRepository,
         FinancialTransactionMapper financialTransactionMapper,
@@ -102,7 +105,8 @@ public class FinancialTransactionService {
         InternalTransferRepository internalTransferRepository,
         CurrentUserService currentUserService,
         TransactionRuleEvaluationService transactionRuleEvaluationService,
-        InternalTransferCommandService internalTransferCommandService
+        InternalTransferCommandService internalTransferCommandService,
+        BudgetThresholdNotificationService budgetThresholdNotificationService
     ) {
         this.financialTransactionRepository = financialTransactionRepository;
         this.financialTransactionMapper = financialTransactionMapper;
@@ -115,6 +119,7 @@ public class FinancialTransactionService {
         this.currentUserService = currentUserService;
         this.transactionRuleEvaluationService = transactionRuleEvaluationService;
         this.internalTransferCommandService = internalTransferCommandService;
+        this.budgetThresholdNotificationService = budgetThresholdNotificationService;
     }
 
     /**
@@ -125,30 +130,37 @@ public class FinancialTransactionService {
      */
     public FinancialTransactionDTO save(FinancialTransactionDTO financialTransactionDTO) {
         LOG.debug("Request to save FinancialTransaction");
-        FinancialTransaction financialTransaction = financialTransactionMapper.toEntity(financialTransactionDTO);
         FinancialAccount account = resolveAccountForCreate(financialTransactionDTO.getAccount());
-        financialTransaction.setAccount(account);
-        Category category = resolveOptionalCategoryForOwner(financialTransactionDTO.getCategory(), ownerLogin(account));
-        CategoryReferenceValidator.validateActiveForNewReference(category);
-        financialTransaction.setCategory(category);
-        financialTransaction.setFinancialSubscription(
-            resolveOptionalSubscriptionForOwner(financialTransactionDTO.getFinancialSubscription(), account)
+        String ownerLogin = ownerLogin(account);
+        return budgetThresholdNotificationService.capture(
+            ownerLogin,
+            "FINANCIAL_TRANSACTION_CREATE",
+            () -> {
+                FinancialTransaction financialTransaction = financialTransactionMapper.toEntity(financialTransactionDTO);
+                financialTransaction.setAccount(account);
+                Category category = resolveOptionalCategoryForOwner(financialTransactionDTO.getCategory(), ownerLogin);
+                CategoryReferenceValidator.validateActiveForNewReference(category);
+                financialTransaction.setCategory(category);
+                financialTransaction.setFinancialSubscription(
+                    resolveOptionalSubscriptionForOwner(financialTransactionDTO.getFinancialSubscription(), account)
+                );
+                Set<Tag> tags = resolveTagsForOwner(financialTransactionDTO.getTags(), ownerLogin);
+                tags.forEach(TagReferenceValidator::validateActiveForNewReference);
+                financialTransaction.setTags(tags);
+                financialTransaction.setTransactionIngestion(
+                    resolveOptionalTransactionIngestionForCreate(financialTransactionDTO.getTransactionIngestion(), account)
+                );
+                normalizeFields(financialTransaction);
+                Instant now = Instant.now();
+                financialTransaction.setCreatedAt(now);
+                financialTransaction.setUpdatedAt(now);
+                validateMergedState(financialTransaction);
+                applyRulesOnCreate(financialTransaction, ownerLogin);
+                validateMergedState(financialTransaction);
+                return financialTransactionMapper.toDto(financialTransactionRepository.save(financialTransaction));
+            },
+            saved -> String.valueOf(saved.getId())
         );
-        Set<Tag> tags = resolveTagsForOwner(financialTransactionDTO.getTags(), ownerLogin(account));
-        tags.forEach(TagReferenceValidator::validateActiveForNewReference);
-        financialTransaction.setTags(tags);
-        financialTransaction.setTransactionIngestion(
-            resolveOptionalTransactionIngestionForCreate(financialTransactionDTO.getTransactionIngestion(), account)
-        );
-        normalizeFields(financialTransaction);
-        Instant now = Instant.now();
-        financialTransaction.setCreatedAt(now);
-        financialTransaction.setUpdatedAt(now);
-        validateMergedState(financialTransaction);
-        applyRulesOnCreate(financialTransaction, ownerLogin(account));
-        validateMergedState(financialTransaction);
-        financialTransaction = financialTransactionRepository.save(financialTransaction);
-        return financialTransactionMapper.toDto(financialTransaction);
     }
 
     /**
@@ -227,9 +239,16 @@ public class FinancialTransactionService {
         FinancialTransaction existing = findAccessibleEntity(financialTransactionDTO.getId()).orElseThrow(() ->
             new IllegalArgumentException("Entity not found")
         );
-        applyUpdate(existing, financialTransactionDTO, updateNode);
-        existing = financialTransactionRepository.save(existing);
-        return financialTransactionMapper.toDto(existing);
+        String ownerLogin = ownerLogin(existing.getAccount());
+        return budgetThresholdNotificationService.capture(
+            ownerLogin,
+            "FINANCIAL_TRANSACTION_UPDATE",
+            () -> {
+                applyUpdate(existing, financialTransactionDTO, updateNode);
+                return financialTransactionMapper.toDto(financialTransactionRepository.save(existing));
+            },
+            updated -> String.valueOf(updated.getId())
+        );
     }
 
     /**
@@ -244,13 +263,18 @@ public class FinancialTransactionService {
 
     public Optional<FinancialTransactionDTO> partialUpdate(FinancialTransactionDTO financialTransactionDTO, JsonNode patchNode) {
         LOG.debug("Request to partially update FinancialTransaction : {}", financialTransactionDTO.getId());
-        return findAccessibleEntity(financialTransactionDTO.getId())
-            .map(existing -> {
-                applyUpdate(existing, financialTransactionDTO, patchNode);
-                return existing;
-            })
-            .map(financialTransactionRepository::save)
-            .map(financialTransactionMapper::toDto);
+        return findAccessibleEntity(financialTransactionDTO.getId()).map(existing -> {
+            String ownerLogin = ownerLogin(existing.getAccount());
+            return budgetThresholdNotificationService.capture(
+                ownerLogin,
+                "FINANCIAL_TRANSACTION_UPDATE",
+                () -> {
+                    applyUpdate(existing, financialTransactionDTO, patchNode);
+                    return financialTransactionMapper.toDto(financialTransactionRepository.save(existing));
+                },
+                updated -> String.valueOf(updated.getId())
+            );
+        });
     }
 
     /**
@@ -369,10 +393,18 @@ public class FinancialTransactionService {
         if (financialTransaction.isEmpty()) {
             return false;
         }
-        internalTransferCommandService.unlinkForFinancialTransactionDeletion(id);
-        financialTransactionRepository.deleteTagLinksByFinancialTransactionId(id);
-        financialTransactionRepository.deleteById(id);
-        return true;
+        String ownerLogin = ownerLogin(financialTransaction.orElseThrow().getAccount());
+        return budgetThresholdNotificationService.capture(
+            ownerLogin,
+            "FINANCIAL_TRANSACTION_DELETE",
+            () -> {
+                internalTransferCommandService.unlinkForFinancialTransactionDeletion(id);
+                financialTransactionRepository.deleteTagLinksByFinancialTransactionId(id);
+                financialTransactionRepository.deleteById(id);
+                return true;
+            },
+            ignored -> String.valueOf(id)
+        );
     }
 
     /**
@@ -383,9 +415,17 @@ public class FinancialTransactionService {
     public void deleteAllForAccount(FinancialAccount account) {
         Long accountId = requireAccountId(account);
         LOG.debug("Request to delete all FinancialTransactions for FinancialAccount : {}", accountId);
-        internalTransferRepository.deleteByAccountIdInEitherRole(accountId);
-        financialTransactionRepository.deleteTagLinksByAccountId(accountId);
-        financialTransactionRepository.deleteByAccountId(accountId);
+        budgetThresholdNotificationService.capture(
+            ownerLogin(account),
+            "FINANCIAL_TRANSACTION_ACCOUNT_DELETE",
+            () -> {
+                internalTransferRepository.deleteByAccountIdInEitherRole(accountId);
+                financialTransactionRepository.deleteTagLinksByAccountId(accountId);
+                financialTransactionRepository.deleteByAccountId(accountId);
+                return accountId;
+            },
+            deletedAccountId -> String.valueOf(deletedAccountId)
+        );
     }
 
     private Stream<FinancialTransaction> accessibleTransactionStream() {

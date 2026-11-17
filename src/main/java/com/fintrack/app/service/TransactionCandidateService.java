@@ -22,6 +22,7 @@ import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.CategorySuggestionDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
@@ -117,6 +118,8 @@ public class TransactionCandidateService {
 
     private final InternalTransferCounterpartQueryService internalTransferCounterpartQueryService;
 
+    private final BudgetThresholdNotificationService budgetThresholdNotificationService;
+
     public TransactionCandidateService(
         TransactionCandidateRepository transactionCandidateRepository,
         TransactionCandidateMapper transactionCandidateMapper,
@@ -130,7 +133,8 @@ public class TransactionCandidateService {
         TransactionRuleEvaluationService transactionRuleEvaluationService,
         TransactionCandidateRuleApplicationService transactionCandidateRuleApplicationService,
         InternalTransferCommandService internalTransferCommandService,
-        InternalTransferCounterpartQueryService internalTransferCounterpartQueryService
+        InternalTransferCounterpartQueryService internalTransferCounterpartQueryService,
+        BudgetThresholdNotificationService budgetThresholdNotificationService
     ) {
         this.transactionCandidateRepository = transactionCandidateRepository;
         this.transactionCandidateMapper = transactionCandidateMapper;
@@ -145,6 +149,7 @@ public class TransactionCandidateService {
         this.transactionCandidateRuleApplicationService = transactionCandidateRuleApplicationService;
         this.internalTransferCommandService = internalTransferCommandService;
         this.internalTransferCounterpartQueryService = internalTransferCounterpartQueryService;
+        this.budgetThresholdNotificationService = budgetThresholdNotificationService;
     }
 
     /**
@@ -231,30 +236,37 @@ public class TransactionCandidateService {
      */
     public Optional<FinancialTransactionDTO> postManualDraft(Long id) {
         LOG.debug("Request to post manual TransactionCandidate draft : {}", id);
-        return findAccessibleEntityForPosting(id).map(existing -> {
-            rejectManualPostMutation(existing);
-            if (existing.getInternalTransferEnabled()) {
-                throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
-            }
-            normalizeFields(existing);
-            deriveAmountAndFlow(existing);
-            recalculateManualDraftStatus(existing);
-            rejectStaleReviewStateForPosting(existing);
-            if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
-                throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
-            }
-            validateCandidate(existing, existing);
+        return findAccessibleEntityForPosting(id).map(existing ->
+            budgetThresholdNotificationService.capture(
+                ownerLogin(existing),
+                "MANUAL_TRANSACTION_CANDIDATE_POST",
+                () -> {
+                    rejectManualPostMutation(existing);
+                    if (existing.getInternalTransferEnabled()) {
+                        throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
+                    }
+                    normalizeFields(existing);
+                    deriveAmountAndFlow(existing);
+                    recalculateManualDraftStatus(existing);
+                    rejectStaleReviewStateForPosting(existing);
+                    if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
+                        throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
+                    }
+                    validateCandidate(existing, existing);
 
-            Instant now = Instant.now();
-            FinancialTransaction financialTransaction = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
-                existing,
-                TransactionOrigin.MANUAL,
-                now
-            );
-            financialTransaction = financialTransactionRepository.save(financialTransaction);
-            deletePostedManualCandidate(existing);
-            return financialTransactionMapper.toDto(financialTransaction);
-        });
+                    Instant now = Instant.now();
+                    FinancialTransaction financialTransaction = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
+                        existing,
+                        TransactionOrigin.MANUAL,
+                        now
+                    );
+                    financialTransaction = financialTransactionRepository.save(financialTransaction);
+                    deletePostedManualCandidate(existing);
+                    return financialTransactionMapper.toDto(financialTransaction);
+                },
+                posted -> String.valueOf(posted.getId())
+            )
+        );
     }
 
     /**
@@ -267,58 +279,68 @@ public class TransactionCandidateService {
         if (command == null || command.getExpectedCandidateVersion() == null) {
             throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
         }
-        return findAccessibleEntityForPosting(id).map(existing -> {
-            rejectManualPostMutation(existing);
-            if (!Objects.equals(existing.getVersion(), command.getExpectedCandidateVersion())) {
-                throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
-            }
-            normalizeFields(existing);
-            deriveAmountAndFlow(existing);
-            recalculateManualDraftStatus(existing);
-            rejectStaleReviewStateForPosting(existing);
-            if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
-                throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
-            }
-            validateCandidate(existing, existing);
-            validateInternalTransferIntent(existing);
+        return findAccessibleEntityForPosting(id).map(existing ->
+            budgetThresholdNotificationService.capture(
+                ownerLogin(existing),
+                "MANUAL_TRANSACTION_CANDIDATE_TRANSFER_POST",
+                () -> {
+                    rejectManualPostMutation(existing);
+                    if (!Objects.equals(existing.getVersion(), command.getExpectedCandidateVersion())) {
+                        throw new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_VERSION_CONFLICT);
+                    }
+                    normalizeFields(existing);
+                    deriveAmountAndFlow(existing);
+                    recalculateManualDraftStatus(existing);
+                    rejectStaleReviewStateForPosting(existing);
+                    if (existing.getStatus() != TransactionCandidateStatus.READY_TO_POST) {
+                        throw new IllegalArgumentException("Manual transaction candidate is not ready to post");
+                    }
+                    validateCandidate(existing, existing);
+                    validateInternalTransferIntent(existing);
 
-            Instant now = Instant.now();
-            FinancialTransaction currentLeg = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
-                existing,
-                TransactionOrigin.MANUAL,
-                now
-            );
-            // Make the current leg addressable by the neutral transfer command.
-            // The enclosing service transaction guarantees that a later error
-            // removes this row too.
-            currentLeg = financialTransactionRepository.saveAndFlush(currentLeg);
+                    Instant now = Instant.now();
+                    FinancialTransaction currentLeg = transactionCandidateFinancialTransactionMapper.toFinancialTransaction(
+                        existing,
+                        TransactionOrigin.MANUAL,
+                        now
+                    );
+                    // Make the current leg addressable by the neutral transfer command.
+                    // The enclosing service transaction guarantees that a later error
+                    // removes this row too.
+                    currentLeg = financialTransactionRepository.saveAndFlush(currentLeg);
 
-            if (existing.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
-                InternalTransferCounterpartCommand counterpart = new InternalTransferCounterpartCommand();
-                counterpart.setTargetAccountId(existing.getInternalTransferCounterpartAccount().getId());
-                counterpart.setPostingDate(existing.getInternalTransferCounterpartPostingDate());
-                counterpart.setDescription(existing.getInternalTransferCounterpartDescription());
-                counterpart.setExternalReference(existing.getInternalTransferCounterpartReference());
-                counterpart.setNotes(existing.getInternalTransferCounterpartNotes());
-                // Leave classification empty. Transfer counterparts deliberately
-                // do not run DNR or TransactionRules.
-                internalTransferCommandService.createCounterpartForTransaction(currentLeg.getId(), counterpart);
-            } else {
-                InternalTransferLinkCommand link = new InternalTransferLinkCommand();
-                Long counterpartId = existing.getInternalTransferCounterpartTransaction().getId();
-                if (currentLeg.getFlow() == TransactionFlow.OUT) {
-                    link.setOutgoingTransactionId(currentLeg.getId());
-                    link.setIncomingTransactionId(counterpartId);
-                } else {
-                    link.setOutgoingTransactionId(counterpartId);
-                    link.setIncomingTransactionId(currentLeg.getId());
-                }
-                internalTransferCommandService.linkExistingTransactions(link);
-            }
+                    if (existing.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART) {
+                        InternalTransferCounterpartCommand counterpart = new InternalTransferCounterpartCommand();
+                        counterpart.setTargetAccountId(existing.getInternalTransferCounterpartAccount().getId());
+                        counterpart.setPostingDate(existing.getInternalTransferCounterpartPostingDate());
+                        counterpart.setDescription(existing.getInternalTransferCounterpartDescription());
+                        counterpart.setExternalReference(existing.getInternalTransferCounterpartReference());
+                        counterpart.setNotes(existing.getInternalTransferCounterpartNotes());
+                        // Leave classification empty. Transfer counterparts deliberately
+                        // do not run DNR or TransactionRules.
+                        internalTransferCommandService.createCounterpartForTransactionWithinFinancialMutation(
+                            currentLeg.getId(),
+                            counterpart
+                        );
+                    } else {
+                        InternalTransferLinkCommand link = new InternalTransferLinkCommand();
+                        Long counterpartId = existing.getInternalTransferCounterpartTransaction().getId();
+                        if (currentLeg.getFlow() == TransactionFlow.OUT) {
+                            link.setOutgoingTransactionId(currentLeg.getId());
+                            link.setIncomingTransactionId(counterpartId);
+                        } else {
+                            link.setOutgoingTransactionId(counterpartId);
+                            link.setIncomingTransactionId(currentLeg.getId());
+                        }
+                        internalTransferCommandService.linkExistingTransactionsWithinFinancialMutation(link);
+                    }
 
-            deletePostedManualCandidate(existing);
-            return financialTransactionMapper.toDto(currentLeg);
-        });
+                    deletePostedManualCandidate(existing);
+                    return financialTransactionMapper.toDto(currentLeg);
+                },
+                posted -> String.valueOf(posted.getId())
+            )
+        );
     }
 
     @Transactional(readOnly = true)
@@ -1534,6 +1556,13 @@ public class TransactionCandidateService {
         if (candidate.getStatus() == TransactionCandidateStatus.FAILED && candidate.getFailedAt() == null) {
             candidate.setFailedAt(now);
         }
+    }
+
+    private String ownerLogin(TransactionCandidate candidate) {
+        if (candidate == null || candidate.getUser() == null || candidate.getUser().getLogin() == null) {
+            throw new IllegalArgumentException("Transaction candidate owner is required");
+        }
+        return candidate.getUser().getLogin();
     }
 
     private boolean fieldPresent(JsonNode node, String fieldName) {

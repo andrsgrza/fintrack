@@ -57,6 +57,7 @@ public class FinancialAccountHardDeleteService {
     private final BudgetRevisionRepository budgetRevisionRepository;
     private final FinancialSubscriptionRepository financialSubscriptionRepository;
     private final TransactionRuleConditionRepository transactionRuleConditionRepository;
+    private final FinancialTransactionService financialTransactionService;
     private final CurrentUserService currentUserService;
 
     public FinancialAccountHardDeleteService(
@@ -71,6 +72,7 @@ public class FinancialAccountHardDeleteService {
         BudgetRevisionRepository budgetRevisionRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
         TransactionRuleConditionRepository transactionRuleConditionRepository,
+        FinancialTransactionService financialTransactionService,
         CurrentUserService currentUserService
     ) {
         this.financialAccountRepository = financialAccountRepository;
@@ -84,6 +86,7 @@ public class FinancialAccountHardDeleteService {
         this.budgetRevisionRepository = budgetRevisionRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.transactionRuleConditionRepository = transactionRuleConditionRepository;
+        this.financialTransactionService = financialTransactionService;
         this.currentUserService = currentUserService;
     }
 
@@ -326,8 +329,10 @@ public class FinancialAccountHardDeleteService {
         transactionCandidateRepository.deleteByAccountId(accountId);
         transactionBatchRepository.deleteByAccountId(accountId);
 
-        financialTransactionRepository.deleteTagLinksByAccountId(accountId);
-        financialTransactionRepository.deleteByAccountId(accountId);
+        // Reuse the ledger deletion boundary so an otherwise eligible active-period mutation is compared through
+        // the canonical Budget evaluation before its financial rows disappear. This stays inside the hard-delete
+        // transaction; a later failure rolls both the account aggregate and any notification work back together.
+        financialTransactionService.deleteAllForAccount(account);
         transactionIngestionRepository.deleteByAccountId(accountId);
 
         // Shared entities survive; only their target-account relationship is removed.

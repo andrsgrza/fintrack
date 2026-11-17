@@ -41,6 +41,7 @@ public class BudgetCreationService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final Clock clock;
+    private final BudgetTimeZoneService budgetTimeZoneService;
 
     public BudgetCreationService(
         BudgetRepository budgetRepository,
@@ -50,7 +51,8 @@ public class BudgetCreationService {
         TagRepository tagRepository,
         UserRepository userRepository,
         CurrentUserService currentUserService,
-        Clock clock
+        Clock clock,
+        BudgetTimeZoneService budgetTimeZoneService
     ) {
         this.budgetRepository = budgetRepository;
         this.revisionScheduleRepository = revisionScheduleRepository;
@@ -60,6 +62,7 @@ public class BudgetCreationService {
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
         this.clock = clock;
+        this.budgetTimeZoneService = budgetTimeZoneService;
     }
 
     public BudgetCreated create(BudgetCreateCommand command) {
@@ -76,7 +79,7 @@ public class BudgetCreationService {
         String name = name(command.name());
         String description = description(command.description());
         if (command.type() == null || command.currency() == null) throw failure("Budget type and currency are required.");
-        resolveZone(command.timeZone());
+        ZoneId requestedZone = resolveZone(command.timeZone());
         BudgetRevisionConfiguration configuration = configuration(command.initialRevision());
         // Calendar validation is centralized in this pure component before any database mutation occurs.
         new BudgetPeriodCalculator(configuration.calendarDefinition());
@@ -97,6 +100,10 @@ public class BudgetCreationService {
         revisionScheduleRepository.saveAndFlush(
             BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), configuration.anchorDate(), 1, "INITIAL", now)
         );
+        // Creation already carries a validated IANA zone. It seeds the profile only when it was previously unset;
+        // later profile updates are applied through immutable effective-period assignments.
+        if (owner.getTimeZone() == null || owner.getTimeZone().isBlank()) owner.setTimeZone(requestedZone.getId());
+        budgetTimeZoneService.recordInitial(saved, owner.getTimeZone(), configuration.anchorDate(), now);
         return view(saved);
     }
 

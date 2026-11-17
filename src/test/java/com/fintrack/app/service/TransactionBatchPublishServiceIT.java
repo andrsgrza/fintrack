@@ -675,7 +675,7 @@ class TransactionBatchPublishServiceIT {
         try {
             doThrow(new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST))
                 .when(internalTransferCommandService)
-                .createCounterpartForTransaction(anyLong(), any(InternalTransferCounterpartCommand.class));
+                .createCounterpartForTransactionWithinFinancialMutation(anyLong(), any(InternalTransferCounterpartCommand.class));
 
             assertThatThrownBy(() -> publishService.publish(batch.getId(), publishCommand(configured.getBatchVersion(), "rollback-create")))
                 .isInstanceOf(InternalTransferCommandException.class)

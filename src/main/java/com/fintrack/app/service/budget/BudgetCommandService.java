@@ -39,6 +39,11 @@ public class BudgetCommandService {
     private final BudgetRevisionScheduleRepository scheduleRepository;
     private final BudgetLifecycleEventRepository lifecycleEventRepository;
     private final BudgetCommandReceiptRepository receiptRepository;
+    private final BudgetNotificationPreferenceRepository notificationPreferenceRepository;
+    private final BudgetThresholdClaimRepository thresholdClaimRepository;
+    private final BudgetNotificationOutboxRepository notificationOutboxRepository;
+    private final BudgetNotificationRepository notificationRepository;
+    private final BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository;
     private final FinancialAccountRepository financialAccountRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
@@ -51,6 +56,11 @@ public class BudgetCommandService {
         BudgetRevisionScheduleRepository scheduleRepository,
         BudgetLifecycleEventRepository lifecycleEventRepository,
         BudgetCommandReceiptRepository receiptRepository,
+        BudgetNotificationPreferenceRepository notificationPreferenceRepository,
+        BudgetThresholdClaimRepository thresholdClaimRepository,
+        BudgetNotificationOutboxRepository notificationOutboxRepository,
+        BudgetNotificationRepository notificationRepository,
+        BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository,
         FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
@@ -62,6 +72,11 @@ public class BudgetCommandService {
         this.scheduleRepository = scheduleRepository;
         this.lifecycleEventRepository = lifecycleEventRepository;
         this.receiptRepository = receiptRepository;
+        this.notificationPreferenceRepository = notificationPreferenceRepository;
+        this.thresholdClaimRepository = thresholdClaimRepository;
+        this.notificationOutboxRepository = notificationOutboxRepository;
+        this.notificationRepository = notificationRepository;
+        this.timeZoneAssignmentRepository = timeZoneAssignmentRepository;
         this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
@@ -195,6 +210,13 @@ public class BudgetCommandService {
         requireVersion(budget, command.expectedVersion());
 
         receiptRepository.deleteByBudgetId(budgetId);
+        // Notification evidence belongs exclusively to the deleted Budget. Financial transactions and shared scope
+        // references remain untouched; deleting a Budget can never mutate financial data.
+        notificationRepository.deleteByBudgetId(budgetId);
+        notificationOutboxRepository.deleteByBudgetId(budgetId);
+        thresholdClaimRepository.deleteByBudgetId(budgetId);
+        notificationPreferenceRepository.deleteByBudgetId(budgetId);
+        timeZoneAssignmentRepository.deleteByBudgetId(budgetId);
         lifecycleEventRepository.deleteTargetingByBudgetId(budgetId);
         lifecycleEventRepository.deleteByBudgetId(budgetId);
         scheduleRepository.deleteTargetingByBudgetId(budgetId);

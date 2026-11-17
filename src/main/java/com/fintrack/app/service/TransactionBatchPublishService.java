@@ -20,6 +20,7 @@ import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TransactionBatchAppendOperationRepository;
 import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.InternalTransferCounterpartCommand;
 import com.fintrack.app.service.dto.TransactionBatchPublicationReceiptDTO;
 import com.fintrack.app.service.dto.TransactionBatchPublishCommand;
@@ -71,6 +72,7 @@ public class TransactionBatchPublishService {
     private final CurrentUserService currentUserService;
     private final Clock clock;
     private final ApplicationProperties applicationProperties;
+    private final BudgetThresholdNotificationService budgetThresholdNotificationService;
 
     public TransactionBatchPublishService(
         TransactionBatchRepository batchRepository,
@@ -84,7 +86,8 @@ public class TransactionBatchPublishService {
         InternalTransferCommandService internalTransferCommandService,
         CurrentUserService currentUserService,
         Clock clock,
-        ApplicationProperties applicationProperties
+        ApplicationProperties applicationProperties,
+        BudgetThresholdNotificationService budgetThresholdNotificationService
     ) {
         this.batchRepository = batchRepository;
         this.candidateRepository = candidateRepository;
@@ -98,6 +101,7 @@ public class TransactionBatchPublishService {
         this.currentUserService = currentUserService;
         this.clock = clock;
         this.applicationProperties = applicationProperties;
+        this.budgetThresholdNotificationService = budgetThresholdNotificationService;
     }
 
     /** Publishes every persisted row in the named workspace or publishes none of them. */
@@ -105,6 +109,9 @@ public class TransactionBatchPublishService {
     public TransactionBatchPublicationReceiptDTO publish(Long batchId, TransactionBatchPublishCommand command) {
         validateCommand(batchId, command);
         String login = currentUserService.getCurrentUserLogin();
+        // Owner lock is acquired before the Batch root and financial-account locks. Individual rows below then retain
+        // a serial, commit-consistent before/after transition while the whole Batch remains one atomic transaction.
+        budgetThresholdNotificationService.lockOwner(login);
         String digest = publicationDigest();
         Instant now = clock.instant();
 
@@ -145,14 +152,23 @@ public class TransactionBatchPublishService {
         // counterpart is materialised or linked before complete preflight.
         Map<Long, FinancialTransaction> counterpartsByCandidateId = lockAndValidateTransferCounterparts(candidates, login, accountsById);
 
-        List<FinancialTransaction> finalTransactions = candidates
-            .stream()
-            .map(candidate -> candidateFinancialTransactionMapper.toFinancialTransaction(candidate, originFor(candidate), now))
-            .toList();
-        // One batched persistence boundary: any later FK/constraint or cleanup failure rolls every new final back.
-        finalTransactions = financialTransactionRepository.saveAllAndFlush(finalTransactions);
-        int linkedTransferCount = persistTransferRelations(candidates, finalTransactions, counterpartsByCandidateId, now);
-        int createdCounterpartCount = createConfiguredTransferCounterparts(candidates, finalTransactions);
+        // A Batch is financially equivalent to publishing its persisted rows in their logical row order. Each
+        // candidate therefore gets its own immutable transition capture, still inside this one outer transaction.
+        List<FinancialTransaction> finalTransactions = new ArrayList<>();
+        int linkedTransferCount = 0;
+        int createdCounterpartCount = 0;
+        Long publicationBatchId = batch.getId();
+        for (TransactionCandidate candidate : candidates) {
+            BatchPublishedRow published = budgetThresholdNotificationService.capture(
+                login,
+                "TRANSACTION_BATCH_PUBLISH",
+                () -> publishCandidate(candidate, counterpartsByCandidateId.get(candidate.getId()), now),
+                row -> publicationBatchId + ":" + candidate.getId() + ":" + row.transaction().getId()
+            );
+            finalTransactions.add(published.transaction());
+            linkedTransferCount += published.linkedExistingTransfer() ? 1 : 0;
+            createdCounterpartCount += published.createdCounterpart() ? 1 : 0;
+        }
 
         // The original association table predates candidate-owned tag entities, so remove it explicitly before the
         // bulk candidate delete. Candidate issues and suppressions are protected by their FK cascade.
@@ -197,6 +213,47 @@ public class TransactionBatchPublishService {
             return toReceipt(batch, true);
         }
         throw new IllegalStateException("BATCH_ALREADY_PUBLISHED");
+    }
+
+    /** Persists one validated row and, where needed, its final transfer relation before evaluating the after-state. */
+    private BatchPublishedRow publishCandidate(TransactionCandidate candidate, FinancialTransaction existingCounterpart, Instant now) {
+        FinancialTransaction transaction = financialTransactionRepository.saveAndFlush(
+            candidateFinancialTransactionMapper.toFinancialTransaction(candidate, originFor(candidate), now)
+        );
+        if (
+            candidate.getInternalTransferEnabled() &&
+            candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.LINK_EXISTING
+        ) {
+            if (existingCounterpart == null) throw transferFailure(InternalTransferErrorCode.TRANSFER_COUNTERPART_STALE);
+            FinancialTransaction outgoing = transaction.getFlow() == TransactionFlow.OUT ? transaction : existingCounterpart;
+            FinancialTransaction incoming = transaction.getFlow() == TransactionFlow.IN ? transaction : existingCounterpart;
+            internalTransferInvariantService.validateExistingPair(outgoing, incoming);
+            internalTransferInvariantService.requireUnlinked(outgoing, incoming);
+            InternalTransfer transfer = new InternalTransfer();
+            transfer.setOutgoingTransaction(outgoing);
+            transfer.setIncomingTransaction(incoming);
+            transfer.setCreatedAt(now);
+            transfer.setUpdatedAt(now);
+            // Keep the aggregate persistence boundary used by the original Batch contract. It is intentionally
+            // flushed before the notification after-state is evaluated, while the outer publication transaction
+            // still guarantees that a failed link rolls every previously published source row back.
+            internalTransferRepository.saveAllAndFlush(List.of(transfer));
+            return new BatchPublishedRow(transaction, true, false);
+        }
+        if (
+            candidate.getInternalTransferEnabled() &&
+            candidate.getInternalTransferMode() == TransactionCandidateInternalTransferMode.CREATE_COUNTERPART
+        ) {
+            InternalTransferCounterpartCommand counterpart = new InternalTransferCounterpartCommand();
+            counterpart.setTargetAccountId(candidate.getInternalTransferCounterpartAccount().getId());
+            counterpart.setPostingDate(candidate.getInternalTransferCounterpartPostingDate());
+            counterpart.setDescription(candidate.getInternalTransferCounterpartDescription());
+            counterpart.setExternalReference(candidate.getInternalTransferCounterpartReference());
+            counterpart.setNotes(candidate.getInternalTransferCounterpartNotes());
+            internalTransferCommandService.createCounterpartForTransactionWithinFinancialMutation(transaction.getId(), counterpart);
+            return new BatchPublishedRow(transaction, false, true);
+        }
+        return new BatchPublishedRow(transaction, false, false);
     }
 
     private void validatePublicationAggregate(TransactionBatch batch, FinancialAccount account, List<TransactionCandidate> candidates) {
@@ -368,7 +425,10 @@ public class TransactionBatchPublishService {
             counterpart.setNotes(candidate.getInternalTransferCounterpartNotes());
             // Classification intentionally stays empty: this product action
             // does not implicitly rerun DNR or TransactionRules.
-            internalTransferCommandService.createCounterpartForTransaction(finalTransactions.get(index).getId(), counterpart);
+            internalTransferCommandService.createCounterpartForTransactionWithinFinancialMutation(
+                finalTransactions.get(index).getId(),
+                counterpart
+            );
             createdCounterpartCount++;
         }
         return createdCounterpartCount;
@@ -406,6 +466,8 @@ public class TransactionBatchPublishService {
     private InternalTransferCommandException transferFailure(InternalTransferErrorCode code) {
         return new InternalTransferCommandException(code);
     }
+
+    private record BatchPublishedRow(FinancialTransaction transaction, boolean linkedExistingTransfer, boolean createdCounterpart) {}
 
     private void validateCandidate(TransactionBatch batch, FinancialAccount account, TransactionCandidate candidate) {
         if (

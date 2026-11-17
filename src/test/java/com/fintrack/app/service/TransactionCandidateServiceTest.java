@@ -34,6 +34,7 @@ import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.CategoryDTO;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
@@ -55,6 +56,7 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -99,6 +101,9 @@ class TransactionCandidateServiceTest {
     @Mock
     private InternalTransferCounterpartQueryService internalTransferCounterpartQueryService;
 
+    @Mock
+    private BudgetThresholdNotificationService budgetThresholdNotificationService;
+
     private TransactionCandidateService transactionCandidateService;
 
     private User user;
@@ -118,12 +123,16 @@ class TransactionCandidateServiceTest {
             transactionRuleEvaluationService,
             new TransactionCandidateRuleApplicationService(),
             internalTransferCommandService,
-            internalTransferCounterpartQueryService
+            internalTransferCounterpartQueryService,
+            budgetThresholdNotificationService
         );
         user = new User();
         user.setId(1L);
         user.setLogin("user");
         lenient().when(currentUserService.getCurrentUserLogin()).thenReturn("user");
+        lenient()
+            .when(budgetThresholdNotificationService.capture(any(), any(), any(), any()))
+            .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
         lenient()
             .when(financialTransactionMapper.toDto(any(FinancialTransaction.class)))
             .thenAnswer(invocation -> {
@@ -497,7 +506,7 @@ class TransactionCandidateServiceTest {
         FinancialTransactionDTO result = transactionCandidateService.postManualDraftAsInternalTransfer(1L, command).orElseThrow();
 
         assertThat(result.getId()).isEqualTo(99L);
-        verify(internalTransferCommandService).createCounterpartForTransaction(
+        verify(internalTransferCommandService).createCounterpartForTransactionWithinFinancialMutation(
             org.mockito.ArgumentMatchers.eq(99L),
             org.mockito.ArgumentMatchers.argThat(
                 counterpart ->
