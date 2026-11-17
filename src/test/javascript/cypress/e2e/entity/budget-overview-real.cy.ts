@@ -921,4 +921,111 @@ describe('Budget overview and creation real acceptance', () => {
         });
       });
   });
+
+  it('uses the real lifecycle UI to schedule and cancel a pause, then permanently deletes only the budget aggregate', () => {
+    const fixture = `${suffix}-${Cypress._.uniqueId('lifecycle-delete')}`;
+    const budgetName = `Browser lifecycle ${fixture}`;
+    const currentDate = '2026-11-16';
+    let budgetId: number;
+    let transactionId: number;
+
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/financial-transactions',
+      body: {
+        transactionDate: '2026-11-10',
+        postingDate: '2026-11-10',
+        description: `Budget lifecycle expense ${fixture}`,
+        amount: 75,
+        flow: 'OUT',
+        origin: 'MANUAL',
+        account: { id: isolatedAccount.id },
+        category: { id: isolatedExpenseChild.id },
+      },
+    })
+      .then(({ body, status }) => {
+        expect(status).to.equal(201);
+        transactionId = body.id;
+        return cy.authenticatedRequest<{ id: number }>({
+          method: 'POST',
+          url: '/api/budgets',
+          body: {
+            name: budgetName,
+            description: 'Lifecycle and hard deletion browser fixture',
+            type: 'EXPENSE',
+            currency: 'MXN',
+            clientRequestId: `budget-lifecycle-${fixture}`,
+            timeZone: 'America/Mexico_City',
+            initialRevision: {
+              targetAmount: 100,
+              intervalCount: 1,
+              intervalUnit: 'MONTH',
+              alignment: 'ANCHORED',
+              anchorDate: '2026-11-01',
+              customDayOfMonth: null,
+              recurrenceMode: 'RECURRING',
+              termination: 'NONE',
+              terminationPeriodCount: null,
+              recurrenceEndDate: null,
+              accountScopeMode: 'SELECTED',
+              accountIds: [isolatedAccount.id],
+              categoryScopeMode: 'SELECTED',
+              categoryIds: [isolatedExpenseRoot.id],
+              tagScopeMode: 'NONE',
+              tagIds: [],
+              tagMatchMode: 'ANY',
+            },
+          },
+        });
+      })
+      .then(({ body, status }) => {
+        expect(status).to.equal(201);
+        budgetId = body.id;
+        cy.intercept('POST', `/api/budgets/${budgetId}/pause`).as('schedulePause');
+        cy.intercept('POST', `/api/budgets/${budgetId}/pause/*/cancel`).as('cancelPause');
+        cy.intercept('DELETE', `/api/budgets/${budgetId}`).as('deleteBudget');
+        cy.visit(`/budgets/${budgetId}?referenceDate=${currentDate}`);
+      });
+
+    cy.get('[data-cy="budgetLifecycleActions"]').click();
+    cy.contains('.dropdown-item', /Pause at next period|Pausar al siguiente período/).click();
+    cy.get('[data-cy="confirmBudgetLifecycle"]').click();
+    cy.wait('@schedulePause').then(({ response }) => expect(response?.statusCode).to.equal(200));
+    cy.get('[data-cy="budgetLifecycleNotice"]').should('be.visible');
+    cy.get('[data-cy="budgetPendingLifecycle"]').should('contain.text', /Pause pending|Pausa pendiente/);
+    cy.get('[data-cy="budgetDetailIdentity"]').should('contain.text', /Active|Activo/);
+    cy.screenshot('budget-5b-c-pending-pause-desktop', { capture: 'viewport' });
+    cy.viewport('iphone-6');
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(375));
+    cy.screenshot('budget-5b-c-pending-pause-mobile', { capture: 'fullPage' });
+    cy.viewport(1440, 960);
+
+    cy.get('[data-cy="budgetLifecycleActions"]').click();
+    cy.contains('.dropdown-item', /Cancel pending pause|Cancelar pausa pendiente/).click();
+    cy.get('[data-cy="confirmBudgetLifecycle"]').click();
+    cy.wait('@cancelPause').then(({ response }) => expect(response?.statusCode).to.equal(200));
+    cy.get('[data-cy="budgetLifecycleNotice"]').should('contain.text', /cancelled|cancelada/i);
+    cy.get('[data-cy="budgetPendingLifecycle"]').should('not.exist');
+
+    cy.get('[data-cy="budgetLifecycleActions"]').click();
+    cy.contains('.dropdown-item', /Delete budget|Eliminar presupuesto/).click();
+    cy.get('[data-cy="confirmBudgetLifecycle"]').click();
+    cy.wait('@deleteBudget').then(({ response }) => expect(response?.statusCode).to.equal(204));
+    cy.location('pathname').should('eq', '/budgets');
+    cy.get('[data-cy="budgetOverviewDeletedNotice"]').should('be.visible');
+    cy.contains('[data-cy^="budgetCard-"]', budgetName).should('not.exist');
+
+    cy.authenticatedRequest({ method: 'GET', url: `/api/financial-accounts/${isolatedAccount.id}` })
+      .its('status')
+      .should('eq', 200);
+    cy.authenticatedRequest({ method: 'GET', url: `/api/financial-transactions/${transactionId}` })
+      .its('status')
+      .should('eq', 200);
+    cy.authenticatedRequest({ method: 'GET', url: `/api/budgets/${budgetId}/history`, failOnStatusCode: false })
+      .its('status')
+      .should('eq', 400);
+
+    cy.visit(`/budgets/${budgetId}?referenceDate=${currentDate}`);
+    cy.contains(/Budget not found|No se encontró el presupuesto/).should('be.visible');
+  });
 });

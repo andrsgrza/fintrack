@@ -96,6 +96,12 @@ export type BudgetHistory = {
   }>;
 };
 
+export type BudgetLifecycleCommandPayload = {
+  expectedVersion: number;
+  clientRequestId: string;
+  timeZone: string;
+};
+
 export type BudgetOverviewItem = {
   budgetId: number;
   name: string;
@@ -257,4 +263,32 @@ export const cancelBudgetRevision = async (
 ): Promise<BudgetMutationResult> => {
   const response = await axios.post<BudgetMutationResult>(`api/budgets/${budgetId}/revisions/${scheduleId}/cancel`, payload);
   return response.data;
+};
+
+export const requestBudgetPause = async (budgetId: number, payload: BudgetLifecycleCommandPayload): Promise<BudgetMutationResult> => {
+  const response = await axios.post<BudgetMutationResult>(`api/budgets/${budgetId}/pause`, payload);
+  return response.data;
+};
+
+export const cancelBudgetPause = async (
+  budgetId: number,
+  eventId: number,
+  payload: BudgetLifecycleCommandPayload,
+): Promise<BudgetMutationResult> => {
+  const response = await axios.post<BudgetMutationResult>(`api/budgets/${budgetId}/pause/${eventId}/cancel`, payload);
+  return response.data;
+};
+
+export const requestBudgetResume = async (budgetId: number, payload: BudgetLifecycleCommandPayload): Promise<BudgetMutationResult> => {
+  const response = await axios.post<BudgetMutationResult>(`api/budgets/${budgetId}/resume`, payload);
+  return response.data;
+};
+
+export const requestBudgetFinish = async (budgetId: number, payload: BudgetLifecycleCommandPayload): Promise<BudgetMutationResult> => {
+  const response = await axios.post<BudgetMutationResult>(`api/budgets/${budgetId}/finish`, payload);
+  return response.data;
+};
+
+export const deleteBudget = async (budgetId: number, expectedVersion: number): Promise<void> => {
+  await axios.delete(`api/budgets/${budgetId}`, { data: { expectedVersion } });
 };

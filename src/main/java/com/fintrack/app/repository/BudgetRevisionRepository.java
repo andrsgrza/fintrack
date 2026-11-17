@@ -28,4 +28,29 @@ public interface BudgetRevisionRepository extends JpaRepository<BudgetRevision, 
 
     @Query(value = "select count(*) from rel_budget_revision__accounts where accounts_id = :accountId", nativeQuery = true)
     long countAccountLinksByAccountId(@Param("accountId") Long accountId);
+
+    @Modifying
+    @Query(
+        value = "delete from rel_budget_revision__accounts where budget_revision_id in (select id from budget_revision where budget_id = :budgetId)",
+        nativeQuery = true
+    )
+    void deleteAccountLinksByBudgetId(@Param("budgetId") Long budgetId);
+
+    @Modifying
+    @Query(
+        value = "delete from rel_budget_revision__categories where budget_revision_id in (select id from budget_revision where budget_id = :budgetId)",
+        nativeQuery = true
+    )
+    void deleteCategoryLinksByBudgetId(@Param("budgetId") Long budgetId);
+
+    @Modifying
+    @Query(
+        value = "delete from rel_budget_revision__tags where budget_revision_id in (select id from budget_revision where budget_id = :budgetId)",
+        nativeQuery = true
+    )
+    void deleteTagLinksByBudgetId(@Param("budgetId") Long budgetId);
+
+    @Modifying
+    @Query("delete from BudgetRevision revision where revision.budget.id = :budgetId")
+    void deleteByBudgetId(@Param("budgetId") Long budgetId);
 }

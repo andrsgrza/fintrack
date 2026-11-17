@@ -1,8 +1,9 @@
 # BUDGET-5B-A — Detalle e historial de períodos
 
 Estado: implementado. Esta primera parte de BUDGET-5B añade una lectura de detalle; la edición de metadatos y
-revisiones inmutables se documenta en [BUDGET-5B-B](BUDGET-5B-B.md). Esta página no incorpora pausa, reanudación,
-finalización, borrado ni notificaciones.
+revisiones inmutables se documenta en [BUDGET-5B-B](BUDGET-5B-B.md). Las acciones de pausa, reanudación,
+finalización y borrado se incorporaron después en [BUDGET-5B-C](BUDGET-5B-C.md); las notificaciones siguen fuera de
+alcance.
 
 ## Ruta y navegación
 

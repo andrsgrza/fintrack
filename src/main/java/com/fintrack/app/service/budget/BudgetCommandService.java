@@ -185,6 +185,27 @@ public class BudgetCommandService {
         return lifecycle(budgetId, command, CANCEL_PAUSE, BudgetLifecycleEventType.PAUSE_CANCELLED, pauseEventId);
     }
 
+    /**
+     * Permanently removes this owner-scoped aggregate and only rows owned by it. Financial records and reusable
+     * account/category/tag entities are linked by revision join tables and are deliberately never deleted here.
+     */
+    public void deleteBudget(Long budgetId, BudgetDeleteCommand command) {
+        require(command != null, "A Budget deletion command is required.");
+        Budget budget = ownedBudget(budgetId);
+        requireVersion(budget, command.expectedVersion());
+
+        receiptRepository.deleteByBudgetId(budgetId);
+        lifecycleEventRepository.deleteTargetingByBudgetId(budgetId);
+        lifecycleEventRepository.deleteByBudgetId(budgetId);
+        scheduleRepository.deleteTargetingByBudgetId(budgetId);
+        scheduleRepository.deleteByBudgetId(budgetId);
+        revisionRepository.deleteAccountLinksByBudgetId(budgetId);
+        revisionRepository.deleteCategoryLinksByBudgetId(budgetId);
+        revisionRepository.deleteTagLinksByBudgetId(budgetId);
+        revisionRepository.deleteByBudgetId(budgetId);
+        require(budgetRepository.deleteAggregateById(budgetId) == 1, "Budget not found.");
+    }
+
     private BudgetMutationResult lifecycle(
         Long budgetId,
         BudgetLifecycleCommand command,

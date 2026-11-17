@@ -151,6 +151,7 @@ const BudgetOverview = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [referenceDate, setReferenceDate] = useState(searchParams.get('referenceDate') ?? browserToday());
+  const deletedNotice = searchParams.get('notice') === 'deleted';
   const [type, setType] = useState<BudgetType | ''>('');
   const [status, setStatus] = useState<BudgetOperationalStatus | ''>('');
   const [items, setItems] = useState<BudgetOverviewItem[]>([]);
@@ -258,6 +259,11 @@ const BudgetOverview = () => {
       {error ? (
         <div className="alert alert-danger" role="alert" data-cy="budgetOverviewError">
           {error}
+        </div>
+      ) : null}
+      {deletedNotice ? (
+        <div className="alert alert-success" role="status" data-cy="budgetOverviewDeletedNotice">
+          {copy(locale, 'El presupuesto y su historial fueron eliminados.', 'The budget and its history were deleted.')}
         </div>
       ) : null}
       {loading ? <div className="text-center py-5 text-muted">{copy(locale, 'Cargando presupuestos…', 'Loading budgets…')}</div> : null}

@@ -9,6 +9,7 @@ import com.fintrack.app.service.budget.BudgetCommandService;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetCreated;
 import com.fintrack.app.service.budget.BudgetCreationService;
+import com.fintrack.app.service.budget.BudgetDeleteCommand;
 import com.fintrack.app.service.budget.BudgetEvaluationHistory;
 import com.fintrack.app.service.budget.BudgetEvaluationResult;
 import com.fintrack.app.service.budget.BudgetEvaluationService;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -139,6 +141,12 @@ public class BudgetResource {
     @PostMapping("/{budgetId}/finish")
     public ResponseEntity<BudgetMutationResult> finish(@PathVariable Long budgetId, @Valid @RequestBody BudgetLifecycleCommand command) {
         return ResponseEntity.ok(commandService.requestFinish(budgetId, command));
+    }
+
+    @DeleteMapping("/{budgetId}")
+    public ResponseEntity<Void> delete(@PathVariable Long budgetId, @Valid @RequestBody BudgetDeleteCommand command) {
+        commandService.deleteBudget(budgetId, command);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{budgetId}/effective-revision")

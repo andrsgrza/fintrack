@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.*;
@@ -122,6 +124,7 @@ class BudgetCommandServiceTest {
                 for (BudgetRevision candidate : budget.getRevisions()) if (candidate.getId() == null) id(candidate, nextId++);
                 return budget;
             });
+        lenient().when(budgetRepository.deleteAggregateById(7L)).thenReturn(1);
         lenient()
             .when(scheduleRepository.saveAndFlush(any(BudgetRevisionSchedule.class)))
             .thenAnswer(invocation -> {
@@ -323,6 +326,32 @@ class BudgetCommandServiceTest {
             .isInstanceOf(BudgetCommandException.class)
             .extracting("code")
             .isEqualTo(BudgetCommandException.Code.INVALID_PAYLOAD);
+    }
+
+    @Test
+    void permanentlyDeletesOnlyBudgetOwnedRecordsAfterAnExactVersionCheck() {
+        service.deleteBudget(7L, new BudgetDeleteCommand(3L));
+
+        verify(receiptRepository).deleteByBudgetId(7L);
+        verify(lifecycleEventRepository).deleteTargetingByBudgetId(7L);
+        verify(lifecycleEventRepository).deleteByBudgetId(7L);
+        verify(scheduleRepository).deleteTargetingByBudgetId(7L);
+        verify(scheduleRepository).deleteByBudgetId(7L);
+        verify(revisionRepository).deleteAccountLinksByBudgetId(7L);
+        verify(revisionRepository).deleteCategoryLinksByBudgetId(7L);
+        verify(revisionRepository).deleteTagLinksByBudgetId(7L);
+        verify(revisionRepository).deleteByBudgetId(7L);
+        verify(budgetRepository).deleteAggregateById(7L);
+    }
+
+    @Test
+    void rejectsAStaleDeletionWithoutRemovingBudgetOwnedRecords() {
+        assertThatThrownBy(() -> service.deleteBudget(7L, new BudgetDeleteCommand(2L)))
+            .isInstanceOf(BudgetCommandException.class)
+            .extracting("code")
+            .isEqualTo(BudgetCommandException.Code.VERSION_CONFLICT);
+
+        verifyNoInteractions(receiptRepository, lifecycleEventRepository, scheduleRepository);
     }
 
     private static BudgetRevisionScheduleCommand revisionCommand(

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Label } from 'reactstrap';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -14,13 +14,19 @@ import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/pr
 import {
   BudgetEvaluation,
   BudgetEvaluationHistory,
+  BudgetHistory,
+  BudgetOperationalPeriod,
   BudgetOperationalStatus,
   BudgetOverviewItem,
   BudgetRevision,
+  getBudgetCurrentEvaluation,
   getBudgetEffectiveRevision,
   getBudgetEvaluationHistory,
+  getBudgetHistory,
+  getBudgetOperationalPeriods,
   getBudgetOverview,
 } from './budget-api';
+import { BudgetLifecycleActions, BudgetLifecycleStatus } from './budget-lifecycle-actions';
 import { browserTimeZone, browserToday, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
 
 const HISTORY_PAGE_SIZE = 10;
@@ -214,9 +220,124 @@ const EvaluationSummary = ({ locale, item, evaluation }: { locale: string; item:
   );
 };
 
+const useBudgetLifecycle = ({
+  budgetId,
+  item,
+  locale,
+  refreshKey,
+  setError,
+  timeZone,
+}: {
+  budgetId: number;
+  item: BudgetOverviewItem | null;
+  locale: string;
+  refreshKey: number;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
+  timeZone: string;
+}) => {
+  const [history, setHistory] = useState<BudgetHistory | null>(null);
+  const [currentEvaluation, setCurrentEvaluation] = useState<BudgetEvaluation | null>(null);
+  const [nextPeriod, setNextPeriod] = useState<BudgetOperationalPeriod | null>(null);
+
+  useEffect(() => {
+    setHistory(null);
+    setCurrentEvaluation(null);
+    setNextPeriod(null);
+    if (!item || !Number.isSafeInteger(budgetId) || budgetId <= 0) return;
+    let active = true;
+    void getBudgetHistory(budgetId)
+      .then(async nextHistory => {
+        if (!active) return;
+        setHistory(nextHistory);
+        try {
+          const current = await getBudgetCurrentEvaluation(budgetId, timeZone);
+          if (!active) return;
+          setCurrentEvaluation(current);
+          if (current.operationalStatus === 'COMPLETED') return;
+          const following = await getBudgetOperationalPeriods(budgetId, {
+            firstIndex: current.periodIndex + 1,
+            lastIndex: current.periodIndex + 1,
+            timeZone,
+          });
+          if (active) setNextPeriod(following[0] ?? null);
+        } catch {
+          // A scheduled or completed calendar may not have a current period. Its only available action remains deletion.
+        }
+      })
+      .catch(problem => {
+        if (active)
+          setError(
+            userFacingError(
+              problem,
+              copy(locale, 'No se pudieron cargar las acciones del presupuesto.', 'Budget actions could not be loaded.'),
+            ),
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [budgetId, item, locale, refreshKey, setError, timeZone]);
+
+  return { currentEvaluation, history, nextPeriod };
+};
+
+const BudgetDetailHeaderActions = ({
+  budgetId,
+  item,
+  lifecycleCurrentEvaluation,
+  lifecycleHistory,
+  lifecycleItem,
+  lifecycleNextPeriod,
+  locale,
+  onChanged,
+  onSuccess,
+  onDeleted,
+  referenceDate,
+  timeZone,
+}: {
+  budgetId: number;
+  item: BudgetOverviewItem | null;
+  lifecycleCurrentEvaluation: BudgetEvaluation | null;
+  lifecycleHistory: BudgetHistory | null;
+  lifecycleItem: BudgetOverviewItem | null;
+  lifecycleNextPeriod: BudgetOperationalPeriod | null;
+  locale: string;
+  onChanged: () => void;
+  onSuccess: (message: string) => void;
+  onDeleted: () => void;
+  referenceDate: string;
+  timeZone: string;
+}) => (
+  <div className="d-flex flex-wrap gap-2">
+    {item && lifecycleHistory ? (
+      <BudgetLifecycleActions
+        locale={locale}
+        budget={lifecycleItem ?? item}
+        history={lifecycleHistory}
+        currentPeriodStart={lifecycleCurrentEvaluation?.startInclusive ?? null}
+        nextPeriodStart={lifecycleNextPeriod?.startInclusive ?? null}
+        nextPeriodAvailable={!!lifecycleNextPeriod && lifecycleNextPeriod.status !== 'COMPLETED'}
+        timeZone={timeZone}
+        onChanged={onChanged}
+        onSuccess={onSuccess}
+        onDeleted={onDeleted}
+      />
+    ) : null}
+    {lifecycleItem?.operationalStatus !== 'COMPLETED' ? (
+      <Button tag={Link} color="primary" to={`/budgets/${budgetId}/edit`} data-cy="editBudget">
+        {copy(locale, 'Editar presupuesto', 'Edit budget')}
+      </Button>
+    ) : null}
+    <Button tag={Link} color="secondary" outline to={`/budgets?referenceDate=${referenceDate}`} data-cy="backToBudgets">
+      {copy(locale, 'Volver a presupuestos', 'Back to budgets')}
+    </Button>
+  </div>
+);
+
 const BudgetDetail = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const { budgetId: rawBudgetId } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const budgetId = Number(rawBudgetId);
   const timeZone = useMemo(browserTimeZone, []);
@@ -229,10 +350,13 @@ const BudgetDetail = () => {
   const [scopeNames, setScopeNames] = useState<ScopeNames | null>(null);
   const [history, setHistory] = useState<BudgetEvaluationHistory | null>(null);
   const [historyFirst, setHistoryFirst] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const lifecycle = useBudgetLifecycle({ budgetId, item, locale, refreshKey, setError, timeZone });
 
   const chooseReferenceDate = (value: string) => {
     if (!value) return;
@@ -276,7 +400,7 @@ const BudgetDetail = () => {
     return () => {
       active = false;
     };
-  }, [budgetId, locale, referenceDate, timeZone]);
+  }, [budgetId, locale, referenceDate, refreshKey, timeZone]);
 
   useEffect(() => {
     if (!item?.evaluation || !Number.isSafeInteger(budgetId) || budgetId <= 0) return;
@@ -399,6 +523,12 @@ const BudgetDetail = () => {
   const canGoPrevious = previousEvaluation !== null;
   const canGoNext = nextEvaluation !== null;
   const goToPeriod = (period: BudgetEvaluation) => chooseReferenceDate(period.startInclusive);
+  const lifecycleItem = lifecycle.currentEvaluation ? { ...item, operationalStatus: lifecycle.currentEvaluation.operationalStatus } : item;
+  const refreshLifecycle = () => setRefreshKey(current => current + 1);
+  const returnToOverviewAfterDeletion = () => {
+    const next = new URLSearchParams({ referenceDate, notice: 'deleted' });
+    navigate(`/budgets?${next.toString()}`);
+  };
 
   return (
     <ProductPage wide className="budget-detail">
@@ -413,16 +543,20 @@ const BudgetDetail = () => {
           )
         }
         actions={
-          <div className="d-flex flex-wrap gap-2">
-            {item?.operationalStatus !== 'COMPLETED' ? (
-              <Button tag={Link} color="primary" to={`/budgets/${budgetId}/edit`} data-cy="editBudget">
-                {copy(locale, 'Editar presupuesto', 'Edit budget')}
-              </Button>
-            ) : null}
-            <Button tag={Link} color="secondary" outline to={`/budgets?referenceDate=${referenceDate}`} data-cy="backToBudgets">
-              {copy(locale, 'Volver a presupuestos', 'Back to budgets')}
-            </Button>
-          </div>
+          <BudgetDetailHeaderActions
+            budgetId={budgetId}
+            item={item}
+            lifecycleCurrentEvaluation={lifecycle.currentEvaluation}
+            lifecycleHistory={lifecycle.history}
+            lifecycleItem={lifecycleItem}
+            lifecycleNextPeriod={lifecycle.nextPeriod}
+            locale={locale}
+            onChanged={refreshLifecycle}
+            onSuccess={setLifecycleNotice}
+            onDeleted={returnToOverviewAfterDeletion}
+            referenceDate={referenceDate}
+            timeZone={timeZone}
+          />
         }
         dataCy="budgetDetailHeading"
       />
@@ -432,13 +566,25 @@ const BudgetDetail = () => {
           {error}
         </div>
       ) : null}
+      {lifecycleNotice ? (
+        <div className="alert alert-success" role="status" data-cy="budgetLifecycleNotice">
+          {lifecycleNotice}
+        </div>
+      ) : null}
       {loading ? <div className="text-center py-5 text-muted">{copy(locale, 'Cargando presupuesto…', 'Loading budget…')}</div> : null}
       {!loading && item ? (
-        <div className="d-flex flex-wrap align-items-center gap-2 mb-4" data-cy="budgetDetailIdentity">
-          <span className="badge text-bg-light border text-dark">{typeLabel(locale, item.type)}</span>
-          <span className="badge text-bg-light border text-dark">{item.currency}</span>
-          <span className="badge text-bg-light border text-dark">{statusLabel(locale, item.operationalStatus)}</span>
-        </div>
+        <>
+          <div className="d-flex flex-wrap align-items-center gap-2 mb-4" data-cy="budgetDetailIdentity">
+            <span className="badge text-bg-light border text-dark">{typeLabel(locale, item.type)}</span>
+            <span className="badge text-bg-light border text-dark">{item.currency}</span>
+            <span className="badge text-bg-light border text-dark">{statusLabel(locale, lifecycleItem.operationalStatus)}</span>
+          </div>
+          <BudgetLifecycleStatus
+            locale={locale}
+            history={lifecycle.history}
+            currentPeriodStart={lifecycle.currentEvaluation?.startInclusive ?? null}
+          />
+        </>
       ) : null}
       {!loading && notFound ? (
         <ProductSection title={copy(locale, 'No se encontró el presupuesto', 'Budget not found')}>

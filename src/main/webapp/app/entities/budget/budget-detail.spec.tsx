@@ -3,7 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import BudgetDetail from './budget-detail';
-import { getBudgetEffectiveRevision, getBudgetEvaluationHistory, getBudgetOverview } from './budget-api';
+import {
+  getBudgetCurrentEvaluation,
+  getBudgetEffectiveRevision,
+  getBudgetEvaluationHistory,
+  getBudgetHistory,
+  getBudgetOperationalPeriods,
+  getBudgetOverview,
+} from './budget-api';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
 import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
@@ -13,6 +20,14 @@ jest.mock('./budget-api', () => ({
   getBudgetOverview: jest.fn(),
   getBudgetEvaluationHistory: jest.fn(),
   getBudgetEffectiveRevision: jest.fn(),
+  getBudgetHistory: jest.fn(),
+  getBudgetCurrentEvaluation: jest.fn(),
+  getBudgetOperationalPeriods: jest.fn(),
+  requestBudgetPause: jest.fn(),
+  cancelBudgetPause: jest.fn(),
+  requestBudgetResume: jest.fn(),
+  requestBudgetFinish: jest.fn(),
+  deleteBudget: jest.fn(),
 }));
 jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
   getSelectableFinancialAccounts: jest.fn(),
@@ -23,6 +38,9 @@ jest.mock('app/entities/tag/tag-selectable.service', () => ({ getSelectableTags:
 const mockOverview = getBudgetOverview as jest.Mock;
 const mockHistory = getBudgetEvaluationHistory as jest.Mock;
 const mockRevision = getBudgetEffectiveRevision as jest.Mock;
+const mockLifecycleHistory = getBudgetHistory as jest.Mock;
+const mockCurrentEvaluation = getBudgetCurrentEvaluation as jest.Mock;
+const mockOperationalPeriods = getBudgetOperationalPeriods as jest.Mock;
 const mockAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockCategories = getSelectableCategories as jest.Mock;
 const mockTags = getSelectableTags as jest.Mock;
@@ -108,6 +126,18 @@ describe('BudgetDetail', () => {
       return Promise.resolve({ firstPeriodIndex, size, evaluations: rows });
     });
     mockRevision.mockResolvedValue(initialRevision);
+    mockLifecycleHistory.mockResolvedValue({ budgetId: 10, version: 4, revisions: [initialRevision], schedules: [], lifecycleEvents: [] });
+    mockCurrentEvaluation.mockResolvedValue(evaluation(2, { periodTiming: 'CURRENT' }));
+    mockOperationalPeriods.mockResolvedValue([
+      {
+        index: 3,
+        startInclusive: '2026-04-01',
+        endExclusive: '2026-05-01',
+        effectiveRevisionId: 21,
+        status: 'ACTIVE',
+        evaluationEligible: true,
+      },
+    ]);
     mockAccounts.mockResolvedValue([{ id: 41, name: 'Cash card', accountType: 'DEBIT', currency: 'MXN', active: true }]);
     mockCategories.mockResolvedValue([{ id: 51, name: 'Food', categoryType: 'EXPENSE', active: true }]);
     mockTags.mockResolvedValue([{ id: 61, name: 'Essential', active: true }]);
@@ -182,5 +212,15 @@ describe('BudgetDetail', () => {
     await waitFor(() => expect(byCy('budgetNoScheduledPeriod')).toBeTruthy());
     expect(byCy('budgetNoScheduledPeriod').textContent).toContain('no scheduled period');
     expect(mockRevision).not.toHaveBeenCalled();
+  });
+
+  it('loads lifecycle state from the actual current period rather than the historical period being viewed', async () => {
+    mockCurrentEvaluation.mockResolvedValue(evaluation(2, { operationalStatus: 'PAUSED', periodTiming: 'CURRENT' }));
+    renderDetail();
+
+    await screen.findByText('Historic groceries');
+    await waitFor(() => expect(mockCurrentEvaluation).toHaveBeenCalledWith(10, expect.any(String)));
+    expect(byCy('budgetDetailIdentity').textContent).toContain('Paused');
+    expect(byCy('budgetLifecycleActions')).toBeTruthy();
   });
 });

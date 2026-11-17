@@ -4,6 +4,7 @@ import com.fintrack.app.domain.Budget;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -11,6 +12,11 @@ import org.springframework.stereotype.Repository;
 /** Persistence boundary for the Budget aggregate, intentionally not a generated CRUD repository. */
 @Repository
 public interface BudgetRepository extends JpaRepository<Budget, Long> {
+    /** Used only after the command service has owner-authorized and removed every Budget-owned dependent row. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from Budget budget where budget.id = :budgetId")
+    int deleteAggregateById(@Param("budgetId") Long budgetId);
+
     @Query("select b from Budget b where b.id = :id and b.user.login = :login")
     Optional<Budget> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 

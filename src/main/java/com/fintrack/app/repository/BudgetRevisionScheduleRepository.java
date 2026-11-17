@@ -4,6 +4,7 @@ import com.fintrack.app.domain.BudgetRevisionSchedule;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -27,4 +28,13 @@ public interface BudgetRevisionScheduleRepository extends JpaRepository<BudgetRe
         "where schedule.id = :id and schedule.budget.id = :budgetId"
     )
     Optional<BudgetRevisionSchedule> findOneByIdAndBudgetId(@Param("id") Long id, @Param("budgetId") Long budgetId);
+
+    /** Delete cancellation records before their self-referenced scheduled record. */
+    @Modifying
+    @Query("delete from BudgetRevisionSchedule schedule where schedule.budget.id = :budgetId and schedule.targetSchedule is not null")
+    void deleteTargetingByBudgetId(@Param("budgetId") Long budgetId);
+
+    @Modifying
+    @Query("delete from BudgetRevisionSchedule schedule where schedule.budget.id = :budgetId")
+    void deleteByBudgetId(@Param("budgetId") Long budgetId);
 }

@@ -2,6 +2,7 @@ package com.fintrack.app.web.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -13,6 +14,7 @@ import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
+import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.BudgetAccountScopeMode;
@@ -29,7 +31,9 @@ import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.budget.BudgetCalendarPreviewCommand;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
+import com.fintrack.app.service.budget.BudgetDeleteCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
+import com.fintrack.app.service.budget.BudgetLifecycleCommand;
 import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
 import com.fintrack.app.service.budget.BudgetVersionedCommand;
@@ -508,6 +512,123 @@ class BudgetResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.revisions.length()").value(3))
             .andExpect(jsonPath("$.schedules.length()").value(4));
+    }
+
+    @Test
+    @Transactional
+    void permanentlyDeletesOnlyTheOwnedBudgetAggregateAndPreservesFinancialScopeRecords() throws Exception {
+        User owner = currentUser();
+        FinancialAccount account = FinancialAccountResourceIT.createEntity(entityManager);
+        account.setUser(owner);
+        account.setCurrency(CurrencyCode.MXN);
+        Category category = CategoryResourceIT.createEntity(entityManager);
+        category.setUser(owner);
+        Tag tag = TagResourceIT.createEntity(entityManager);
+        tag.setUser(owner);
+        entityManager.persist(account);
+        entityManager.persist(category);
+        entityManager.persist(tag);
+        entityManager.flush();
+
+        FinancialTransaction transaction = FinancialTransactionResourceIT.createEntity(entityManager);
+        transaction.setAccount(account);
+        entityManager.persist(transaction);
+        entityManager.flush();
+
+        String created = restBudgetMockMvc
+            .perform(
+                post("/api/budgets")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            command("budget-delete", Set.of(account.getId()), Set.of(category.getId()), Set.of(tag.getId()), TEST_TODAY)
+                        )
+                    )
+            )
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long createdVersion = objectMapper.readTree(created).path("version").asLong();
+
+        String scheduled = restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(revisionSchedule(createdVersion, "delete-future-revision", TEST_TODAY.plusMonths(1)))
+                    )
+            )
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long scheduledVersion = objectMapper.readTree(scheduled).path("version").asLong();
+        String paused = restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/pause", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetLifecycleCommand(scheduledVersion, "delete-pending-pause", "America/Mexico_City")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long currentVersion = objectMapper.readTree(paused).path("version").asLong();
+
+        otherUser();
+        restBudgetMockMvc
+            .perform(
+                delete("/api/budgets/{id}", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(new BudgetDeleteCommand(currentVersion)))
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                delete("/api/budgets/{id}", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(new BudgetDeleteCommand(currentVersion - 1)))
+            )
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("VERSION_CONFLICT"));
+
+        restBudgetMockMvc
+            .perform(
+                delete("/api/budgets/{id}", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(new BudgetDeleteCommand(currentVersion)))
+            )
+            .andExpect(status().isNoContent());
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(budgetRepository.existsById(budgetId)).isFalse();
+        assertThat(rows("budget_revision", budgetId)).isZero();
+        assertThat(rows("budget_revision_schedule", budgetId)).isZero();
+        assertThat(rows("budget_lifecycle_event", budgetId)).isZero();
+        assertThat(rows("budget_command_receipt", budgetId)).isZero();
+        assertThat(entityManager.find(FinancialAccount.class, account.getId())).isNotNull();
+        assertThat(entityManager.find(FinancialTransaction.class, transaction.getId())).isNotNull();
+        assertThat(entityManager.find(Category.class, category.getId())).isNotNull();
+        assertThat(entityManager.find(Tag.class, tag.getId())).isNotNull();
+
+        restBudgetMockMvc.perform(get("/api/budgets/{id}/history", budgetId)).andExpect(status().isBadRequest());
+    }
+
+    private long rows(String table, long budgetId) {
+        return (
+            (Number) entityManager
+                .createNativeQuery("select count(*) from " + table + " where budget_id = :budgetId")
+                .setParameter("budgetId", budgetId)
+                .getSingleResult()
+        ).longValue();
     }
 
     private BudgetCreateCommand command(String requestId, Set<Long> accountIds, Set<Long> categoryIds, Set<Long> tagIds) {

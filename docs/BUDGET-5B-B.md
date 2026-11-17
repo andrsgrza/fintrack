@@ -1,7 +1,8 @@
 # BUDGET-5B-B — Edición y revisiones inmutables
 
 Estado: implementado sobre la lectura de BUDGET-5B-A. Esta entrega añade edición de metadatos y programación de
-revisiones; no incorpora pausa, reanudación, finalización, borrado ni notificaciones.
+revisiones. Las acciones de pausa, reanudación, finalización y borrado se añadieron posteriormente en
+[BUDGET-5B-C](BUDGET-5B-C.md); notificaciones siguen fuera de alcance.
 
 ## Flujo de edición
 
