@@ -10,6 +10,7 @@ import {
   getBudgetHistory,
   getBudgetOperationalPeriods,
   getBudgetOverview,
+  cancelBudgetPause,
 } from './budget-api';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -41,6 +42,7 @@ const mockRevision = getBudgetEffectiveRevision as jest.Mock;
 const mockLifecycleHistory = getBudgetHistory as jest.Mock;
 const mockCurrentEvaluation = getBudgetCurrentEvaluation as jest.Mock;
 const mockOperationalPeriods = getBudgetOperationalPeriods as jest.Mock;
+const mockCancelPause = cancelBudgetPause as jest.Mock;
 const mockAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockCategories = getSelectableCategories as jest.Mock;
 const mockTags = getSelectableTags as jest.Mock;
@@ -138,6 +140,7 @@ describe('BudgetDetail', () => {
         evaluationEligible: true,
       },
     ]);
+    mockCancelPause.mockResolvedValue(undefined);
     mockAccounts.mockResolvedValue([{ id: 41, name: 'Cash card', accountType: 'DEBIT', currency: 'MXN', active: true }]);
     mockCategories.mockResolvedValue([{ id: 51, name: 'Food', categoryType: 'EXPENSE', active: true }]);
     mockTags.mockResolvedValue([{ id: 61, name: 'Essential', active: true }]);
@@ -222,5 +225,35 @@ describe('BudgetDetail', () => {
     await waitFor(() => expect(mockCurrentEvaluation).toHaveBeenCalledWith(10, expect.any(String)));
     expect(byCy('budgetDetailIdentity').textContent).toContain('Paused');
     expect(byCy('budgetLifecycleActions')).toBeTruthy();
+  });
+
+  it('keeps lifecycle actions mounted while refreshing after cancelling a pending pause', async () => {
+    mockLifecycleHistory.mockResolvedValue({
+      budgetId: 10,
+      version: 4,
+      revisions: [initialRevision],
+      schedules: [],
+      lifecycleEvents: [
+        {
+          id: 77,
+          type: 'PAUSE_REQUESTED',
+          effectivePeriodStart: '2026-04-01',
+          targetEventId: null,
+        },
+      ],
+    });
+    renderDetail();
+
+    await screen.findByText('Historic groceries');
+    await waitFor(() => expect(screen.getByText('Cancel pending pause')).toBeTruthy());
+    fireEvent.click(byCy('budgetLifecycleActions'));
+    fireEvent.click(screen.getByText('Cancel pending pause'));
+    fireEvent.click(byCy('confirmBudgetLifecycle'));
+    await waitFor(() => expect(mockCancelPause).toHaveBeenCalledWith(10, 77, expect.any(Object)));
+    await waitFor(() => expect(byCy('budgetLifecycleNotice')).toBeTruthy());
+
+    fireEvent.click(byCy('budgetLifecycleActions'));
+    fireEvent.click(screen.getByText('Delete budget'));
+    await waitFor(() => expect(byCy('confirmBudgetLifecycle')).toBeTruthy());
   });
 });

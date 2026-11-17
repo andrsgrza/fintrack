@@ -12,10 +12,16 @@ import org.springframework.stereotype.Repository;
 /** Persistence boundary for the Budget aggregate, intentionally not a generated CRUD repository. */
 @Repository
 public interface BudgetRepository extends JpaRepository<Budget, Long> {
-    /** Used only after the command service has owner-authorized and removed every Budget-owned dependent row. */
+    /**
+     * Used only after the command service has owner-authorized and removed every Budget-owned dependent row.
+     *
+     * <p>The version predicate closes the time-of-check/time-of-use window between command validation and the final
+     * aggregate deletion. If another command touched the Budget after it was read, this update affects no row and the
+     * enclosing transaction rolls all dependent-row cleanup back.
+     */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("delete from Budget budget where budget.id = :budgetId")
-    int deleteAggregateById(@Param("budgetId") Long budgetId);
+    @Query("delete from Budget budget where budget.id = :budgetId and budget.version = :expectedVersion")
+    int deleteAggregateById(@Param("budgetId") Long budgetId, @Param("expectedVersion") Long expectedVersion);
 
     @Query("select b from Budget b where b.id = :id and b.user.login = :login")
     Optional<Budget> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);

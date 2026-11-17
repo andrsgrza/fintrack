@@ -77,7 +77,7 @@ describe('Budget lifecycle real acceptance', { retries: 0 }, () => {
       })
       .then(({ status }) => {
         expect(status).to.equal(201);
-        return cy.authenticatedRequest<{ id: number }>({
+        return cy.authenticatedRequest<{ id: number; version: number }>({
           method: 'POST',
           url: '/api/budgets',
           body: budgetPayload(pauseBudgetName),
@@ -85,8 +85,24 @@ describe('Budget lifecycle real acceptance', { retries: 0 }, () => {
       })
       .then(({ body, status }) => {
         expect(status).to.equal(201);
-        cy.intercept('POST', `/api/budgets/${body.id}/pause`).as('pauseBudget');
-        cy.visit(`/budgets/${body.id}?referenceDate=2026-03-15`);
+        return cy
+          .authenticatedRequest<{ version: number }>({
+            method: 'POST',
+            url: `/api/budgets/${body.id}/revisions`,
+            body: {
+              expectedVersion: body.version,
+              clientRequestId: `lifecycle-revision-${fixture}`,
+              timeZone: 'America/Mexico_City',
+              applyToCurrentPeriod: false,
+              effectivePeriodStart: '2026-03-16',
+              revision: { ...budgetPayload(pauseBudgetName).initialRevision, targetAmount: 125 },
+            },
+          })
+          .then(({ status: revisionStatus }) => {
+            expect(revisionStatus).to.equal(200);
+            cy.intercept('POST', `/api/budgets/${body.id}/pause`).as('pauseBudget');
+            cy.visit(`/budgets/${body.id}?referenceDate=2026-03-15`);
+          });
       });
 
     cy.get('[data-cy="budgetLifecycleActions"]').click();
@@ -126,6 +142,7 @@ describe('Budget lifecycle real acceptance', { retries: 0 }, () => {
     cy.get('[data-cy="budgetDetailIdentity"]')
       .invoke('text')
       .should('match', /Paused|Pausado/);
+    cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '125.00');
     cy.get('[data-cy="budgetDetailActual"]').should('contain.text', '—');
     cy.get('[data-cy="budgetEvaluationState"]').should('be.visible');
     cy.get('[data-cy="budgetLifecycleActions"]').click();
@@ -159,6 +176,10 @@ describe('Budget lifecycle real acceptance', { retries: 0 }, () => {
     cy.get('[data-cy="budgetDetailReferenceDate"]').clear();
     cy.get('[data-cy="budgetDetailReferenceDate"]').type('2026-03-17');
     cy.get('[data-cy="budgetDetailActual"]').should('not.contain.text', '—');
+    cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '125.00');
+    // The March 16 movement belongs to the paused period. Resumption opens a new
+    // March 17 period and must not carry that spending forward.
+    cy.get('[data-cy="budgetDetailActual"]').should('contain.text', '0.00');
     cy.get('[data-cy="budgetDetailIdentity"]')
       .invoke('text')
       .should('match', /Active|Activo/);
@@ -213,9 +234,10 @@ describe('Budget lifecycle real acceptance', { retries: 0 }, () => {
           },
         });
       })
-      .then(({ body, status }) => {
+      .then(({ headers, status }) => {
         expect(status).to.equal(201);
-        transactionId = body.id;
+        transactionId = Number(String(headers.location).split('/').pop());
+        expect(transactionId).to.be.greaterThan(0);
         account = { id: accountId, name: '' };
         return cy.authenticatedRequest<{ id: number }>({ method: 'POST', url: '/api/budgets', body: budgetPayload(deleteBudgetName) });
       })
@@ -256,9 +278,11 @@ describe('Budget lifecycle real acceptance', { retries: 0 }, () => {
       cy.authenticatedRequest({ method: 'GET', url: `/api/financial-accounts/${accountId}` })
         .its('status')
         .should('eq', 200);
+      expect(transactionId).to.be.greaterThan(0);
       cy.authenticatedRequest({ method: 'GET', url: `/api/financial-transactions/${transactionId}` })
         .its('status')
         .should('eq', 200);
+      expect(budgetId).to.be.greaterThan(0);
       cy.authenticatedRequest({ method: 'GET', url: `/api/budgets/${budgetId}/history`, failOnStatusCode: false })
         .its('status')
         .should('eq', 400);

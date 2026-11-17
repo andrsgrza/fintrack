@@ -445,6 +445,175 @@ class BudgetResourceIT {
 
     @Test
     @Transactional
+    void deniesEveryBudgetReadAndMutationCommandToAnotherOwner() throws Exception {
+        String created = restBudgetMockMvc
+            .perform(
+                post("/api/budgets")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(command("owner-isolation-all-commands", Set.of(), Set.of(), Set.of(), TEST_TODAY))
+                    )
+            )
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long creationVersion = objectMapper.readTree(created).path("version").asLong();
+        String scheduled = restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            revisionSchedule(creationVersion, "owner-isolation-revision", TEST_TODAY.plusMonths(1))
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long scheduleId = objectMapper.readTree(scheduled).path("revisionScheduleId").asLong();
+        long scheduledVersion = objectMapper.readTree(scheduled).path("version").asLong();
+        String paused = restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/pause", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetLifecycleCommand(scheduledVersion, "owner-isolation-pause", "America/Mexico_City")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long pauseEventId = objectMapper.readTree(paused).path("lifecycleEventId").asLong();
+        long currentVersion = objectMapper.readTree(paused).path("version").asLong();
+        otherUser();
+
+        // Evaluation endpoints intentionally return 404; command/history endpoints preserve their existing 400
+        // owner-scoped contract. Every route must deny before exposing revision, event, or financial information.
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{id}/evaluation/current", budgetId).with(user(OTHER_USER_LOGIN)).param("timeZone", "America/Mexico_City")
+            )
+            .andExpect(status().isNotFound());
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{id}/evaluations", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .param("firstPeriodIndex", "0")
+                    .param("size", "1")
+                    .param("timeZone", "America/Mexico_City")
+            )
+            .andExpect(status().isNotFound());
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/history", budgetId).with(user(OTHER_USER_LOGIN)))
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{id}/effective-revision", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .param("periodStart", TEST_TODAY.toString())
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{id}/periods", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .param("firstIndex", "0")
+                    .param("lastIndex", "1")
+                    .param("timeZone", "America/Mexico_City")
+            )
+            .andExpect(status().isBadRequest());
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(revisionSchedule(currentVersion, "foreign-revision", TEST_TODAY.plusMonths(2))))
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions/{scheduleId}/replace", budgetId, scheduleId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(revisionSchedule(currentVersion, "foreign-replace", TEST_TODAY.plusMonths(1))))
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions/{scheduleId}/cancel", budgetId, scheduleId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetVersionedCommand(currentVersion, "foreign-cancel-revision", "America/Mexico_City")
+                        )
+                    )
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/pause", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(new BudgetLifecycleCommand(currentVersion, "foreign-pause", "America/Mexico_City"))
+                    )
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/pause/{eventId}/cancel", budgetId, pauseEventId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetLifecycleCommand(currentVersion, "foreign-cancel-pause", "America/Mexico_City")
+                        )
+                    )
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/resume", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(new BudgetLifecycleCommand(currentVersion, "foreign-resume", "America/Mexico_City"))
+                    )
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/finish", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(new BudgetLifecycleCommand(currentVersion, "foreign-finish", "America/Mexico_City"))
+                    )
+            )
+            .andExpect(status().isBadRequest());
+        restBudgetMockMvc
+            .perform(
+                delete("/api/budgets/{id}", budgetId)
+                    .with(user(OTHER_USER_LOGIN))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(new BudgetDeleteCommand(currentVersion)))
+            )
+            .andExpect(status().isBadRequest());
+
+        assertThat(budgetRepository.findById(budgetId)).isPresent();
+    }
+
+    @Test
+    @Transactional
     void updatesMetadataAndReplacesAFutureRevisionWithoutMutatingPriorHistory() throws Exception {
         String created = restBudgetMockMvc
             .perform(
@@ -620,6 +789,39 @@ class BudgetResourceIT {
         assertThat(entityManager.find(Tag.class, tag.getId())).isNotNull();
 
         restBudgetMockMvc.perform(get("/api/budgets/{id}/history", budgetId)).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Transactional
+    void refusesTheFinalDatabaseDeleteWhenAnotherCommandAlreadyAdvancedTheBudgetVersion() throws Exception {
+        String created = restBudgetMockMvc
+            .perform(
+                post("/api/budgets")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(command("delete-version-guard", Set.of(), Set.of(), Set.of(), TEST_TODAY)))
+            )
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long creationVersion = objectMapper.readTree(created).path("version").asLong();
+
+        restBudgetMockMvc
+            .perform(
+                put("/api/budgets/{id}/metadata", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(new BudgetMetadataUpdateCommand(creationVersion, "Changed", null)))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(creationVersion + 1));
+
+        // This runs against the real PostgreSQL row, not a mocked repository. The final delete must use the
+        // expected version as a predicate, otherwise a stale deleter could erase the just-updated aggregate.
+        assertThat(budgetRepository.deleteAggregateById(budgetId, creationVersion)).isZero();
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(budgetRepository.findById(budgetId)).isPresent();
     }
 
     private long rows(String table, long budgetId) {

@@ -124,7 +124,7 @@ class BudgetCommandServiceTest {
                 for (BudgetRevision candidate : budget.getRevisions()) if (candidate.getId() == null) id(candidate, nextId++);
                 return budget;
             });
-        lenient().when(budgetRepository.deleteAggregateById(7L)).thenReturn(1);
+        lenient().when(budgetRepository.deleteAggregateById(7L, 3L)).thenReturn(1);
         lenient()
             .when(scheduleRepository.saveAndFlush(any(BudgetRevisionSchedule.class)))
             .thenAnswer(invocation -> {
@@ -262,6 +262,25 @@ class BudgetCommandServiceTest {
     }
 
     @Test
+    void preservesAnIndependentFutureRevisionWhenAPendingPauseIsCancelled() {
+        BudgetMutationResult revision = service.scheduleRevision(
+            7L,
+            revisionCommand(3L, "revision-april", false, LocalDate.of(2026, 4, 1), "1500.00")
+        );
+        BudgetMutationResult pause = service.requestPause(7L, new BudgetLifecycleCommand(4L, "pause-april", "America/Mexico_City"));
+        service.cancelPendingPause(7L, pause.lifecycleEventId(), new BudgetLifecycleCommand(5L, "cancel-pause", "America/Mexico_City"));
+
+        BudgetTimeline timeline = new BudgetTimeline(schedules, events);
+        BudgetTimeline.OperationalPeriod april = timeline.periods(1, 1, LocalDate.of(2026, 3, 15)).get(0);
+        assertThat(revision.effectivePeriodStart()).isEqualTo(LocalDate.of(2026, 4, 1));
+        assertThat(april.status()).isEqualTo(BudgetPeriodOperationalStatus.SCHEDULED);
+        assertThat(april.revision().getTargetAmount()).isEqualByComparingTo("1500.00");
+        assertThat(events)
+            .extracting(BudgetLifecycleEvent::getEventType)
+            .containsExactly(BudgetLifecycleEventType.PAUSE_REQUESTED, BudgetLifecycleEventType.PAUSE_CANCELLED);
+    }
+
+    @Test
     void rejectsAReusedCommandIdWhenItsRevisionPayloadDiffers() {
         service.scheduleRevision(7L, revisionCommand(3L, "same-request", false, LocalDate.of(2026, 4, 1), "1500.00"));
 
@@ -329,6 +348,21 @@ class BudgetCommandServiceTest {
     }
 
     @Test
+    void retainsScheduledRevisionHistoryWhenCompletionMakesItsBoundaryIneligibleForEvaluation() {
+        BudgetMutationResult revision = service.scheduleRevision(
+            7L,
+            revisionCommand(3L, "revision-april", false, LocalDate.of(2026, 4, 1), "1500.00")
+        );
+        BudgetMutationResult completion = service.requestFinish(7L, new BudgetLifecycleCommand(4L, "finish-april", "America/Mexico_City"));
+
+        BudgetTimeline.OperationalPeriod april = new BudgetTimeline(schedules, events).periods(1, 1, LocalDate.of(2026, 3, 15)).get(0);
+        assertThat(completion.effectivePeriodStart()).isEqualTo(revision.effectivePeriodStart());
+        assertThat(april.revision().getTargetAmount()).isEqualByComparingTo("1500.00");
+        assertThat(april.status()).isEqualTo(BudgetPeriodOperationalStatus.COMPLETED);
+        assertThat(april.evaluationEligible()).isFalse();
+    }
+
+    @Test
     void permanentlyDeletesOnlyBudgetOwnedRecordsAfterAnExactVersionCheck() {
         service.deleteBudget(7L, new BudgetDeleteCommand(3L));
 
@@ -341,7 +375,7 @@ class BudgetCommandServiceTest {
         verify(revisionRepository).deleteCategoryLinksByBudgetId(7L);
         verify(revisionRepository).deleteTagLinksByBudgetId(7L);
         verify(revisionRepository).deleteByBudgetId(7L);
-        verify(budgetRepository).deleteAggregateById(7L);
+        verify(budgetRepository).deleteAggregateById(7L, 3L);
     }
 
     @Test

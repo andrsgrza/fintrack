@@ -203,7 +203,9 @@ public class BudgetCommandService {
         revisionRepository.deleteCategoryLinksByBudgetId(budgetId);
         revisionRepository.deleteTagLinksByBudgetId(budgetId);
         revisionRepository.deleteByBudgetId(budgetId);
-        require(budgetRepository.deleteAggregateById(budgetId) == 1, "Budget not found.");
+        if (budgetRepository.deleteAggregateById(budgetId, command.expectedVersion()) != 1) {
+            throw conflict("This Budget changed before it could be deleted.");
+        }
     }
 
     private BudgetMutationResult lifecycle(

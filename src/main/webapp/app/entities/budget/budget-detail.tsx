@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, Label } from 'reactstrap';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
@@ -238,12 +238,18 @@ const useBudgetLifecycle = ({
   const [history, setHistory] = useState<BudgetHistory | null>(null);
   const [currentEvaluation, setCurrentEvaluation] = useState<BudgetEvaluation | null>(null);
   const [nextPeriod, setNextPeriod] = useState<BudgetOperationalPeriod | null>(null);
+  const loadedBudgetId = useRef<number | null>(null);
 
   useEffect(() => {
-    setHistory(null);
-    setCurrentEvaluation(null);
-    setNextPeriod(null);
-    if (!item || !Number.isSafeInteger(budgetId) || budgetId <= 0) return;
+    const validBudget = !!item && Number.isSafeInteger(budgetId) && budgetId > 0;
+    const changedBudget = loadedBudgetId.current !== budgetId;
+    loadedBudgetId.current = budgetId;
+    if (!validBudget || changedBudget) {
+      setHistory(null);
+      setCurrentEvaluation(null);
+      setNextPeriod(null);
+    }
+    if (!validBudget) return;
     let active = true;
     void getBudgetHistory(budgetId)
       .then(async nextHistory => {

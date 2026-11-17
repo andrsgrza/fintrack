@@ -146,6 +146,16 @@ export const BudgetLifecycleActions = ({
   const canSchedule = !!history && !!currentPeriodStart && !!nextPeriodStart && nextPeriodAvailable;
   const actions: LifecycleAction[] = [];
 
+  const selectAction = (event: React.MouseEvent<HTMLElement>, nextAction: LifecycleAction) => {
+    // Reactstrap's dropdown also handles click propagation. Close its menu explicitly so a
+    // refresh triggered by the prior lifecycle command cannot swallow the confirmation action.
+    event.preventDefault();
+    event.stopPropagation();
+    if (submitting) return;
+    setMenuOpen(false);
+    setAction(nextAction);
+  };
+
   if (budget.operationalStatus === 'ACTIVE') {
     if (canSchedule && !hasPending) actions.push('PAUSE', 'FINISH');
     if (pending.pendingPause) actions.push('CANCEL_PAUSE');
@@ -245,12 +255,12 @@ export const BudgetLifecycleActions = ({
           {actions
             .filter(candidate => candidate !== 'DELETE')
             .map(candidate => (
-              <DropdownItem key={candidate} onClick={() => setAction(candidate)} disabled={submitting}>
+              <DropdownItem key={candidate} onClick={event => selectAction(event, candidate)} disabled={submitting}>
                 {actionLabel(locale, candidate)}
               </DropdownItem>
             ))}
           <DropdownItem divider />
-          <DropdownItem className="text-danger" onClick={() => setAction('DELETE')} disabled={submitting}>
+          <DropdownItem className="text-danger" onClick={event => selectAction(event, 'DELETE')} disabled={submitting}>
             {actionLabel(locale, 'DELETE')}
           </DropdownItem>
         </DropdownMenu>

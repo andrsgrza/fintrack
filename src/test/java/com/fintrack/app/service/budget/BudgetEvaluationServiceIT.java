@@ -48,6 +48,9 @@ class BudgetEvaluationServiceIT {
     private BudgetEvaluationService evaluationService;
 
     @Autowired
+    private BudgetCommandService commandService;
+
+    @Autowired
     private MockMvc restBudgetMockMvc;
 
     @Autowired
@@ -313,6 +316,63 @@ class BudgetEvaluationServiceIT {
         assertThat(afterCompletion.actualAmount()).isEqualByComparingTo("0");
         assertThat(afterCompletion.evaluationStatus()).isEqualTo(BudgetEvaluationStatus.EVALUATED);
         assertThat(pause.getId()).isNotNull();
+    }
+
+    @Test
+    void applies_current_and_future_revisions_without_proration_or_mutating_historical_financial_results() {
+        User owner = currentUser();
+        FinancialAccount account = account(owner, "Integrated revision MXN", CurrencyCode.MXN);
+        Category expense = category(owner, "Integrated revision expense", CategoryType.EXPENSE, null);
+        FinancialTransaction januaryExpense = transaction(account, expense, TransactionFlow.OUT, "50.00", LocalDate.of(2026, 1, 12));
+        FinancialTransaction marchExpense = transaction(account, expense, TransactionFlow.OUT, "100.00", LocalDate.of(2026, 3, 8));
+        transactionRepository.saveAndFlush(januaryExpense);
+        transactionRepository.saveAndFlush(marchExpense);
+
+        Budget budget = budget(owner, BudgetType.EXPENSE, "200.00", LocalDate.of(2026, 1, 1), BudgetCategoryScopeMode.ALL, Set.of());
+        BudgetEvaluationResult januaryBefore = evaluationService.period(budget.getId(), 0, ZONE);
+        BudgetEvaluationResult marchBefore = evaluationService.current(budget.getId(), ZONE);
+        assertThat(januaryBefore.actualAmount()).isEqualByComparingTo("50.00");
+        assertThat(januaryBefore.targetAmount()).isEqualByComparingTo("200.00");
+        assertThat(januaryBefore.progressPercentage()).isEqualByComparingTo("25.00");
+        assertThat(marchBefore.actualAmount()).isEqualByComparingTo("100.00");
+        assertThat(marchBefore.targetAmount()).isEqualByComparingTo("200.00");
+
+        BudgetMutationResult currentChange = commandService.scheduleRevision(
+            budget.getId(),
+            revisionCommand(budget.getVersion(), "integrated-current-revision", true, null, "150.00")
+        );
+        BudgetEvaluationResult januaryAfterCurrentChange = evaluationService.period(budget.getId(), 0, ZONE);
+        BudgetEvaluationResult marchAfterCurrentChange = evaluationService.current(budget.getId(), ZONE);
+        assertThat(januaryAfterCurrentChange.revisionId()).isEqualTo(januaryBefore.revisionId());
+        assertThat(januaryAfterCurrentChange.targetAmount()).isEqualByComparingTo("200.00");
+        assertThat(januaryAfterCurrentChange.actualAmount()).isEqualByComparingTo("50.00");
+        assertThat(marchAfterCurrentChange.revisionId()).isEqualTo(currentChange.revisionId());
+        assertThat(marchAfterCurrentChange.targetAmount()).isEqualByComparingTo("150.00");
+        assertThat(marchAfterCurrentChange.actualAmount()).isEqualByComparingTo("100.00");
+        assertThat(marchAfterCurrentChange.progressPercentage()).isEqualByComparingTo("66.67");
+        assertThat(marchAfterCurrentChange.remainingAmount()).isEqualByComparingTo("50.00");
+
+        // Financial facts remain live. This correction changes March's actual, not either immutable revision.
+        marchExpense.setAmount(new BigDecimal("150.00"));
+        transactionRepository.saveAndFlush(marchExpense);
+        BudgetEvaluationResult marchAfterFinancialCorrection = evaluationService.current(budget.getId(), ZONE);
+        assertThat(marchAfterFinancialCorrection.revisionId()).isEqualTo(currentChange.revisionId());
+        assertThat(marchAfterFinancialCorrection.actualAmount()).isEqualByComparingTo("150.00");
+        assertThat(marchAfterFinancialCorrection.progressPercentage()).isEqualByComparingTo("100.00");
+        assertThat(marchAfterFinancialCorrection.remainingAmount()).isEqualByComparingTo("0.00");
+
+        BudgetMutationResult futureChange = commandService.scheduleRevision(
+            budget.getId(),
+            revisionCommand(currentChange.version(), "integrated-future-revision", false, LocalDate.of(2026, 4, 1), "180.00")
+        );
+        BudgetEvaluationResult januaryAfterFutureChange = evaluationService.period(budget.getId(), 0, ZONE);
+        BudgetEvaluationResult april = evaluationService.period(budget.getId(), 3, ZONE);
+        assertThat(januaryAfterFutureChange.revisionId()).isEqualTo(januaryBefore.revisionId());
+        assertThat(januaryAfterFutureChange.actualAmount()).isEqualByComparingTo("50.00");
+        assertThat(april.revisionId()).isEqualTo(futureChange.revisionId());
+        assertThat(april.targetAmount()).isEqualByComparingTo("180.00");
+        assertThat(april.evaluationStatus()).isEqualTo(BudgetEvaluationStatus.NOT_YET_EVALUATED);
+        assertThat(april.actualAmount()).isNull();
     }
 
     @Test
@@ -582,6 +642,40 @@ class BudgetEvaluationServiceIT {
             categoryScope,
             tagScope,
             tagMatchMode
+        );
+    }
+
+    private BudgetRevisionScheduleCommand revisionCommand(
+        long expectedVersion,
+        String requestId,
+        boolean applyToCurrentPeriod,
+        LocalDate effectivePeriodStart,
+        String targetAmount
+    ) {
+        return new BudgetRevisionScheduleCommand(
+            expectedVersion,
+            requestId,
+            ZONE,
+            applyToCurrentPeriod,
+            effectivePeriodStart,
+            new BudgetInitialRevisionCommand(
+                new BigDecimal(targetAmount),
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.NATURAL,
+                LocalDate.of(2026, 1, 1),
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null,
+                BudgetAccountScopeMode.ALL,
+                Set.of(),
+                BudgetCategoryScopeMode.ALL,
+                Set.of(),
+                BudgetTagScopeMode.NONE,
+                Set.of(),
+                BudgetTagMatchMode.ANY
+            )
         );
     }
 
