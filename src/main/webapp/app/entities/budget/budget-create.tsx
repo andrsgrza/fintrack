@@ -24,8 +24,8 @@ import {
   userFacingError,
 } from './budget-utils';
 
-type ScopeMode = 'ALL' | 'SELECTED';
-type TagScopeMode = 'NONE' | 'SELECTED';
+export type ScopeMode = 'ALL' | 'SELECTED';
+export type TagScopeMode = 'NONE' | 'SELECTED';
 type IntervalUnit = '' | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 type Alignment = 'ANCHORED' | 'NATURAL' | 'CUSTOM';
 type RecurrenceMode = 'ONCE' | 'RECURRING';
@@ -36,7 +36,7 @@ const newRequestId = () => {
   return `budget-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 };
 
-const categoryCompatible = (category: ICategorySelectable, type: BudgetType) =>
+export const categoryCompatible = (category: ICategorySelectable, type: BudgetType) =>
   category.categoryType === 'BOTH' || category.categoryType === type;
 
 const categoryLabel = (category: ICategorySelectable) =>
@@ -98,7 +98,9 @@ const dateInMonth = (month: string, requestedDay: number) => {
 
 const dateInYear = (year: string, month: number, requestedDay: number) => dateInMonth(`${year}-${pad(month)}`, requestedDay);
 
-const BudgetScopeSection = ({
+export const BudgetScopeSection = ({
+  title,
+  controlPrefix = '',
   locale,
   submitting,
   referencesLoading,
@@ -122,6 +124,8 @@ const BudgetScopeSection = ({
   setTagIds,
   referenceError,
 }: {
+  title?: string;
+  controlPrefix?: string;
   locale: string;
   submitting: boolean;
   referencesLoading: boolean;
@@ -145,17 +149,27 @@ const BudgetScopeSection = ({
   setTagIds: React.Dispatch<React.SetStateAction<number[]>>;
   referenceError: string | null;
 }) => (
-  <ProductSection title={copy(locale, '3. Alcance', '3. Scope')}>
+  <ProductSection title={title ?? copy(locale, '3. Alcance', '3. Scope')}>
     <div className="d-flex flex-column gap-4">
       <fieldset disabled={submitting || referencesLoading}>
         <legend className="h6">{copy(locale, 'Cuentas', 'Accounts')}</legend>
         <div className="d-flex flex-wrap gap-3 mb-2">
           <Label check>
-            <Input type="radio" name="accountScope" checked={accountScope === 'ALL'} onChange={() => setAccountScope('ALL')} />{' '}
+            <Input
+              type="radio"
+              name={controlPrefix ? `${controlPrefix}-accountScope` : 'accountScope'}
+              checked={accountScope === 'ALL'}
+              onChange={() => setAccountScope('ALL')}
+            />{' '}
             {copy(locale, 'Todas las cuentas de esta moneda', 'All accounts in this currency')}
           </Label>
           <Label check>
-            <Input type="radio" name="accountScope" checked={accountScope === 'SELECTED'} onChange={() => setAccountScope('SELECTED')} />{' '}
+            <Input
+              type="radio"
+              name={controlPrefix ? `${controlPrefix}-accountScope` : 'accountScope'}
+              checked={accountScope === 'SELECTED'}
+              onChange={() => setAccountScope('SELECTED')}
+            />{' '}
             {copy(locale, 'Cuentas seleccionadas', 'Selected accounts')}
           </Label>
         </div>
@@ -189,11 +203,21 @@ const BudgetScopeSection = ({
         <legend className="h6">{copy(locale, 'Categorías', 'Categories')}</legend>
         <div className="d-flex flex-wrap gap-3 mb-2">
           <Label check>
-            <Input type="radio" name="categoryScope" checked={categoryScope === 'ALL'} onChange={() => setCategoryScope('ALL')} />{' '}
+            <Input
+              type="radio"
+              name={controlPrefix ? `${controlPrefix}-categoryScope` : 'categoryScope'}
+              checked={categoryScope === 'ALL'}
+              onChange={() => setCategoryScope('ALL')}
+            />{' '}
             {copy(locale, 'Todas las categorías compatibles', 'All compatible categories')}
           </Label>
           <Label check>
-            <Input type="radio" name="categoryScope" checked={categoryScope === 'SELECTED'} onChange={() => setCategoryScope('SELECTED')} />{' '}
+            <Input
+              type="radio"
+              name={controlPrefix ? `${controlPrefix}-categoryScope` : 'categoryScope'}
+              checked={categoryScope === 'SELECTED'}
+              onChange={() => setCategoryScope('SELECTED')}
+            />{' '}
             {copy(locale, 'Categorías seleccionadas y sus subcategorías', 'Selected categories and their subcategories')}
           </Label>
         </div>
@@ -227,11 +251,21 @@ const BudgetScopeSection = ({
         <legend className="h6">{copy(locale, 'Etiquetas', 'Tags')}</legend>
         <div className="d-flex flex-wrap gap-3 mb-2">
           <Label check>
-            <Input type="radio" name="tagScope" checked={tagScope === 'NONE'} onChange={() => setTagScope('NONE')} />{' '}
+            <Input
+              type="radio"
+              name={controlPrefix ? `${controlPrefix}-tagScope` : 'tagScope'}
+              checked={tagScope === 'NONE'}
+              onChange={() => setTagScope('NONE')}
+            />{' '}
             {copy(locale, 'Sin filtrar por etiquetas', 'Do not filter by tags')}
           </Label>
           <Label check>
-            <Input type="radio" name="tagScope" checked={tagScope === 'SELECTED'} onChange={() => setTagScope('SELECTED')} />{' '}
+            <Input
+              type="radio"
+              name={controlPrefix ? `${controlPrefix}-tagScope` : 'tagScope'}
+              checked={tagScope === 'SELECTED'}
+              onChange={() => setTagScope('SELECTED')}
+            />{' '}
             {copy(locale, 'Etiquetas seleccionadas', 'Selected tags')}
           </Label>
         </div>
@@ -239,17 +273,27 @@ const BudgetScopeSection = ({
           <>
             <div className="d-flex flex-wrap gap-3 mb-2">
               <Label check>
-                <Input type="radio" name="tagMatchMode" checked={tagMatchMode === 'ANY'} onChange={() => setTagMatchMode('ANY')} />{' '}
+                <Input
+                  type="radio"
+                  name={controlPrefix ? `${controlPrefix}-tagMatchMode` : 'tagMatchMode'}
+                  checked={tagMatchMode === 'ANY'}
+                  onChange={() => setTagMatchMode('ANY')}
+                />{' '}
                 {copy(locale, 'Cualquiera de las etiquetas', 'Any selected tag')}
               </Label>
               <Label check>
-                <Input type="radio" name="tagMatchMode" checked={tagMatchMode === 'ALL'} onChange={() => setTagMatchMode('ALL')} />{' '}
+                <Input
+                  type="radio"
+                  name={controlPrefix ? `${controlPrefix}-tagMatchMode` : 'tagMatchMode'}
+                  checked={tagMatchMode === 'ALL'}
+                  onChange={() => setTagMatchMode('ALL')}
+                />{' '}
                 {copy(locale, 'Todas las etiquetas', 'All selected tags')}
               </Label>
             </div>
             <ProductTagSelector
-              id="budget-tags"
-              dataCy="budgetTagSelector"
+              id={controlPrefix ? `${controlPrefix}-tags` : 'budget-tags'}
+              dataCy={controlPrefix ? `${controlPrefix}TagSelector` : 'budgetTagSelector'}
               selectedTags={selectedTags}
               availableTags={tags}
               onChange={next => setTagIds(next.flatMap(tag => (tag.id === undefined ? [] : [tag.id])))}

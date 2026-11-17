@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Input, Label } from 'reactstrap';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAppSelector } from 'app/config/store';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
@@ -42,17 +42,7 @@ const goalLabel = (locale: string, evaluation: BudgetEvaluation) => {
   return label ? copy(locale, label[0], label[1]) : null;
 };
 
-const BudgetCard = ({
-  item,
-  locale,
-  selected,
-  referenceDate,
-}: {
-  item: BudgetOverviewItem;
-  locale: string;
-  selected: boolean;
-  referenceDate: string;
-}) => {
+const BudgetCard = ({ item, locale, referenceDate }: { item: BudgetOverviewItem; locale: string; referenceDate: string }) => {
   const evaluation = item.evaluation;
   const actual = evaluation?.actualAmount;
   const progress = evaluation?.progressPercentage;
@@ -70,7 +60,7 @@ const BudgetCard = ({
       : copy(locale, 'No hay un período programado para esta fecha.', 'There is no scheduled period on this date.');
 
   return (
-    <article className={`card border-0 shadow-sm h-100 ${selected ? 'border border-primary' : ''}`} data-cy={`budgetCard-${item.budgetId}`}>
+    <article className="card border-0 shadow-sm h-100" data-cy={`budgetCard-${item.budgetId}`}>
       <div className="card-body p-3 p-md-4 d-flex flex-column gap-3">
         <div className="d-flex align-items-start justify-content-between gap-2">
           <div className="min-w-0">
@@ -159,7 +149,6 @@ const BudgetCard = ({
 const BudgetOverview = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const navigate = useNavigate();
-  const { budgetId } = useParams();
   const [searchParams] = useSearchParams();
   const [referenceDate, setReferenceDate] = useState(searchParams.get('referenceDate') ?? browserToday());
   const [type, setType] = useState<BudgetType | ''>('');
@@ -188,8 +177,6 @@ const BudgetOverview = () => {
       active = false;
     };
   }, [locale, referenceDate, status, timeZone, type]);
-
-  const visibleItems = budgetId ? items.filter(item => String(item.budgetId) === budgetId) : items;
 
   return (
     <ProductPage wide className="budget-overview">
@@ -274,7 +261,7 @@ const BudgetOverview = () => {
         </div>
       ) : null}
       {loading ? <div className="text-center py-5 text-muted">{copy(locale, 'Cargando presupuestos…', 'Loading budgets…')}</div> : null}
-      {!loading && !error && !visibleItems.length ? (
+      {!loading && !error && !items.length ? (
         <ProductSection title={copy(locale, 'Aún no tienes presupuestos', 'You do not have budgets yet')}>
           <p className="mb-3">
             {copy(
@@ -288,11 +275,11 @@ const BudgetOverview = () => {
           </Button>
         </ProductSection>
       ) : null}
-      {!loading && !error && visibleItems.length ? (
+      {!loading && !error && items.length ? (
         <div className="row g-3" data-cy="budgetCards">
-          {visibleItems.map(item => (
+          {items.map(item => (
             <div className="col-12 col-lg-6" key={item.budgetId}>
-              <BudgetCard item={item} locale={locale} selected={String(item.budgetId) === budgetId} referenceDate={referenceDate} />
+              <BudgetCard item={item} locale={locale} referenceDate={referenceDate} />
             </div>
           ))}
         </div>

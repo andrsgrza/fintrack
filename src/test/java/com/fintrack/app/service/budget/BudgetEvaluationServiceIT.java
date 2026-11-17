@@ -381,6 +381,91 @@ class BudgetEvaluationServiceIT {
         assertThat(transactionRepository.count()).isEqualTo(transactionsBefore);
     }
 
+    @Test
+    void exposes_the_revision_and_scope_that_were_effective_for_each_bounded_history_period() throws Exception {
+        User owner = currentUser();
+        FinancialAccount januaryAccount = account(owner, "January detail account", CurrencyCode.MXN);
+        Category januaryCategory = category(owner, "January detail category", CategoryType.EXPENSE, null);
+        Tag januaryTag = tag(owner, "January detail tag");
+        Budget budget = budget(
+            owner,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            "100.00",
+            LocalDate.of(2026, 1, 1),
+            BudgetAccountScopeMode.SELECTED,
+            Set.of(januaryAccount),
+            BudgetCategoryScopeMode.SELECTED,
+            Set.of(januaryCategory),
+            BudgetTagScopeMode.SELECTED,
+            Set.of(januaryTag),
+            BudgetTagMatchMode.ALL
+        );
+        BudgetRevision januaryRevision = budget.getRevisions().get(0);
+        BudgetRevision februaryRevision = BudgetRevision.record(
+            2,
+            configuration(
+                "200.00",
+                LocalDate.of(2026, 2, 1),
+                BudgetAccountScopeMode.ALL,
+                BudgetCategoryScopeMode.ALL,
+                BudgetTagScopeMode.NONE,
+                BudgetTagMatchMode.ANY
+            ),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            NOW
+        );
+        budget.addRevision(februaryRevision);
+        revisionRepository.saveAndFlush(februaryRevision);
+        scheduleRepository.saveAndFlush(
+            BudgetRevisionSchedule.scheduled(budget, februaryRevision, LocalDate.of(2026, 2, 1), 2, "detail-r2", NOW)
+        );
+
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{budgetId}/evaluations", budget.getId())
+                    .param("firstPeriodIndex", "0")
+                    .param("size", "2")
+                    .param("timeZone", ZONE)
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.evaluations.length()").value(2))
+            .andExpect(jsonPath("$.evaluations[0].revisionId").value(januaryRevision.getId()))
+            .andExpect(jsonPath("$.evaluations[0].targetAmount").value(100.00))
+            .andExpect(jsonPath("$.evaluations[1].revisionId").value(februaryRevision.getId()))
+            .andExpect(jsonPath("$.evaluations[1].targetAmount").value(200.00));
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{budgetId}/effective-revision", budget.getId()).param("periodStart", "2026-01-01"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(januaryRevision.getId()))
+            .andExpect(jsonPath("$.targetAmount").value(100.00))
+            .andExpect(jsonPath("$.accountIds[0]").value(januaryAccount.getId()))
+            .andExpect(jsonPath("$.categoryIds[0]").value(januaryCategory.getId()))
+            .andExpect(jsonPath("$.tagIds[0]").value(januaryTag.getId()))
+            .andExpect(jsonPath("$.tagMatchMode").value("ALL"));
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{budgetId}/effective-revision", budget.getId()).param("periodStart", "2026-02-01"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(februaryRevision.getId()))
+            .andExpect(jsonPath("$.targetAmount").value(200.00))
+            .andExpect(jsonPath("$.accountScopeMode").value("ALL"));
+
+        User foreign = user("detail-foreign", "detail-foreign@example.invalid");
+        restBudgetMockMvc
+            .perform(
+                get("/api/budgets/{budgetId}/evaluations", budget.getId())
+                    .with(
+                        org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(foreign.getLogin())
+                    )
+                    .param("firstPeriodIndex", "0")
+                    .param("size", "2")
+                    .param("timeZone", ZONE)
+            )
+            .andExpect(status().isNotFound());
+    }
+
     private Budget budget(
         User owner,
         BudgetType type,

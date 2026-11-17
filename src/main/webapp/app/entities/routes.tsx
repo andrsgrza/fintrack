@@ -26,6 +26,8 @@ import PersonalDashboardViewer from './personal-dashboards/personal-dashboard-vi
 import RecommendedDashboards from './recommended-dashboards/recommended-dashboards';
 import BudgetOverview from './budget/budget-overview';
 import BudgetCreate from './budget/budget-create';
+import BudgetDetail from './budget/budget-detail';
+import BudgetEdit from './budget/budget-edit';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {
@@ -43,7 +45,8 @@ export default () => {
         <Route path="analytics/dashboards/personal/:dashboardId" element={<PersonalDashboardViewer />} />
         <Route path="analytics/dashboards/:dashboardId" element={<RecommendedDashboards />} />
         <Route path="budgets/new" element={<BudgetCreate />} />
-        <Route path="budgets/:budgetId" element={<BudgetOverview />} />
+        <Route path="budgets/:budgetId/edit" element={<BudgetEdit />} />
+        <Route path="budgets/:budgetId" element={<BudgetDetail />} />
         <Route path="budgets" element={<BudgetOverview />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />

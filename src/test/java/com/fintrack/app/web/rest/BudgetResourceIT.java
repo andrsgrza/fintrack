@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,6 +30,7 @@ import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.budget.BudgetCalendarPreviewCommand;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
+import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
 import com.fintrack.app.service.budget.BudgetVersionedCommand;
 import jakarta.persistence.EntityManager;
@@ -435,6 +437,77 @@ class BudgetResourceIT {
             .andExpect(jsonPath("$.length()").value(3))
             .andExpect(jsonPath("$[0].startInclusive").value(TEST_TODAY.toString()))
             .andExpect(jsonPath("$[1].startInclusive").value(TEST_TODAY.plusMonths(1).toString()));
+    }
+
+    @Test
+    @Transactional
+    void updatesMetadataAndReplacesAFutureRevisionWithoutMutatingPriorHistory() throws Exception {
+        String created = restBudgetMockMvc
+            .perform(
+                post("/api/budgets")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(command("budget-edit", Set.of(), Set.of(), Set.of(), TEST_TODAY)))
+            )
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        Long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long createdVersion = objectMapper.readTree(created).path("version").asLong();
+
+        restBudgetMockMvc
+            .perform(
+                put("/api/budgets/{id}/metadata", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetMetadataUpdateCommand(createdVersion, "Updated food", "Updated description")
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.version").value(createdVersion + 1));
+        assertThat(budgetRepository.findById(budgetId).orElseThrow()).satisfies(budget -> {
+            assertThat(budget.getName()).isEqualTo("Updated food");
+            assertThat(budget.getDescription()).isEqualTo("Updated description");
+        });
+
+        String scheduled = restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(revisionSchedule(createdVersion + 1, "edit-future", TEST_TODAY.plusMonths(1))))
+            )
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long scheduleId = objectMapper.readTree(scheduled).path("revisionScheduleId").asLong();
+        long scheduledVersion = objectMapper.readTree(scheduled).path("version").asLong();
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions/{scheduleId}/replace", budgetId, scheduleId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(revisionSchedule(scheduledVersion, "edit-replace", TEST_TODAY.plusMonths(1))))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.effectivePeriodStart").value(TEST_TODAY.plusMonths(1).toString()))
+            .andExpect(jsonPath("$.revisionScheduleId").isNumber());
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/effective-revision", budgetId).param("periodStart", TEST_TODAY.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.targetAmount").value(2500.00));
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/effective-revision", budgetId).param("periodStart", TEST_TODAY.plusMonths(1).toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.targetAmount").value(2600.00));
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/history", budgetId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.revisions.length()").value(3))
+            .andExpect(jsonPath("$.schedules.length()").value(4));
     }
 
     private BudgetCreateCommand command(String requestId, Set<Long> accountIds, Set<Long> categoryIds, Set<Long> tagIds) {

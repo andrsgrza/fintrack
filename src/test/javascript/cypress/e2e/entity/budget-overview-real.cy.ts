@@ -268,17 +268,130 @@ describe('Budget overview and creation real acceptance', () => {
     });
     cy.location('pathname').should('match', /^\/budgets\/\d+$/);
     cy.wait('@budgetOverview').its('response.statusCode').should('eq', 200);
-    cy.contains('[data-cy^="budgetCard-"]', budgetName).within(() => {
-      cy.contains(/Expense limit|Límite de gasto/).should('be.visible');
-      cy.get('[data-cy="budgetActual"]').invoke('text').should('match', /0\.00/);
-      cy.contains(/Within limit|Dentro del límite/).should('be.visible');
-    });
+    cy.get('[data-cy="budgetDetailHeading"]').should('contain.text', budgetName);
+    cy.get('[data-cy="budgetDetailActual"]').invoke('text').should('match', /0\.00/);
+    cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget browser account ${suffix}`);
+    cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget root ${suffix}`);
+    cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget tag ${suffix}`);
+    cy.get('[data-cy="budgetPeriodHistory"]').should('be.visible');
     cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(document.documentElement.clientWidth));
-    cy.screenshot('budget-5a-create-and-overview-desktop', { capture: 'viewport' });
+    cy.screenshot('budget-5b-a-detail-desktop', { capture: 'fullPage' });
 
     cy.viewport('iphone-6');
     cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(375));
-    cy.screenshot('budget-5a-create-and-overview-mobile', { capture: 'viewport' });
+    cy.screenshot('budget-5b-a-detail-mobile', { capture: 'fullPage' });
+  });
+
+  it('shows the immutable revision for each real period and stops at a finite calendar boundary', () => {
+    const fixture = `${suffix}-${Cypress._.uniqueId('detail-revision')}`;
+    const budgetName = `Browser detail revision ${fixture}`;
+    const november = '2026-11-15';
+
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/financial-transactions',
+      body: {
+        transactionDate: '2026-11-10',
+        postingDate: '2026-11-10',
+        description: `Budget detail expense ${fixture}`,
+        amount: 50,
+        flow: 'OUT',
+        origin: 'MANUAL',
+        account: { id: isolatedAccount.id },
+        category: { id: isolatedExpenseChild.id },
+      },
+    })
+      .then(({ status }) => {
+        expect(status).to.equal(201);
+        return cy.authenticatedRequest<{ id: number; version: number }>({
+          method: 'POST',
+          url: '/api/budgets',
+          body: {
+            name: budgetName,
+            description: 'Immutable period detail browser fixture',
+            type: 'EXPENSE',
+            currency: 'MXN',
+            clientRequestId: `budget-detail-revision-${fixture}`,
+            timeZone: 'America/Mexico_City',
+            initialRevision: {
+              targetAmount: 100,
+              intervalCount: 1,
+              intervalUnit: 'MONTH',
+              alignment: 'ANCHORED',
+              anchorDate: '2026-11-01',
+              customDayOfMonth: null,
+              recurrenceMode: 'RECURRING',
+              termination: 'AFTER_N_PERIODS',
+              terminationPeriodCount: 2,
+              recurrenceEndDate: null,
+              accountScopeMode: 'SELECTED',
+              accountIds: [isolatedAccount.id],
+              categoryScopeMode: 'SELECTED',
+              categoryIds: [isolatedExpenseRoot.id],
+              tagScopeMode: 'NONE',
+              tagIds: [],
+              tagMatchMode: 'ANY',
+            },
+          },
+        });
+      })
+      .then(({ body, status }) => {
+        expect(status).to.equal(201);
+        return cy
+          .authenticatedRequest({
+            method: 'POST',
+            url: `/api/budgets/${body.id}/revisions`,
+            body: {
+              expectedVersion: body.version,
+              clientRequestId: `budget-detail-revision-two-${fixture}`,
+              timeZone: 'America/Mexico_City',
+              applyToCurrentPeriod: false,
+              effectivePeriodStart: '2026-12-01',
+              revision: {
+                targetAmount: 200,
+                intervalCount: 1,
+                intervalUnit: 'MONTH',
+                alignment: 'ANCHORED',
+                anchorDate: '2026-11-01',
+                customDayOfMonth: null,
+                recurrenceMode: 'RECURRING',
+                termination: 'AFTER_N_PERIODS',
+                terminationPeriodCount: 2,
+                recurrenceEndDate: null,
+                accountScopeMode: 'ALL',
+                accountIds: [],
+                categoryScopeMode: 'ALL',
+                categoryIds: [],
+                tagScopeMode: 'NONE',
+                tagIds: [],
+                tagMatchMode: 'ANY',
+              },
+            },
+          })
+          .then(({ status }) => {
+            expect(status).to.equal(200);
+            return body.id;
+          });
+      })
+      .then(budgetId => {
+        cy.visit(`/budgets/${budgetId}?referenceDate=${november}`);
+        cy.get('[data-cy="budgetDetailHeading"]').should('contain.text', budgetName);
+        cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '100.00');
+        cy.get('[data-cy="budgetDetailActual"]').should('contain.text', '50.00');
+        cy.contains(/Revision 1|Revisión 1/).should('be.visible');
+        cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', isolatedAccount.name);
+
+        cy.get('[data-cy="budgetNextPeriod"]').click();
+        cy.location('search').should('contain', 'referenceDate=2026-12-01');
+        cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '200.00');
+        cy.get('[data-cy="budgetDetailActual"]').should('have.text', '—');
+        cy.contains(/Revision 2|Revisión 2/).should('be.visible');
+        cy.get('[data-cy="budgetScopeSummary"]').should('not.contain.text', isolatedAccount.name);
+        cy.get('[data-cy="budgetNextPeriod"]').should('be.disabled');
+        cy.get('[data-cy="budgetPreviousPeriod"]').click();
+        cy.location('search').should('contain', 'referenceDate=2026-11-01');
+        cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '100.00');
+      });
   });
 
   it('creates each approved calendar mode through real React, REST, Spring, and PostgreSQL', () => {
@@ -356,9 +469,8 @@ describe('Budget overview and creation real acceptance', () => {
       });
     });
     cy.location('pathname').should('match', /^\/budgets\/\d+$/);
-    cy.get('[data-cy="budgetReferenceDate"]').clear();
-    cy.get('[data-cy="budgetReferenceDate"]').type('2026-03-15');
-    cy.get('[data-cy="budgetReferenceToday"]').click();
+    cy.get('[data-cy="budgetDetailReferenceDate"]').clear();
+    cy.get('[data-cy="budgetDetailReferenceDate"]').type('2026-03-15');
 
     base(`One-time calendar ${suffix}`);
     cy.get('[data-cy="budgetCalendarPreview"] ol').should('be.visible');
@@ -684,5 +796,129 @@ describe('Budget overview and creation real acceptance', () => {
     });
     cy.get('[data-cy="budgetReferenceToday"]').click();
     cy.wait('@todayBudgetOverview').its('response.statusCode').should('eq', 200);
+  });
+
+  it('edits the current configuration and manages a future immutable revision through the real detail UI', () => {
+    const fixture = `${suffix}-${Cypress._.uniqueId('revision-editor')}`;
+    const budgetName = `Browser revision editor ${fixture}`;
+    const currentDate = '2026-11-16';
+    let budgetId: number;
+    let futureStart: string;
+
+    cy.authenticatedRequest({
+      method: 'POST',
+      url: '/api/financial-transactions',
+      body: {
+        transactionDate: '2026-11-10',
+        postingDate: '2026-11-10',
+        description: `Budget editor expense ${fixture}`,
+        amount: 50,
+        flow: 'OUT',
+        origin: 'MANUAL',
+        account: { id: isolatedAccount.id },
+        category: { id: isolatedExpenseChild.id },
+      },
+    })
+      .its('status')
+      .should('eq', 201);
+    cy.authenticatedRequest<{ id: number }>({
+      method: 'POST',
+      url: '/api/budgets',
+      body: {
+        name: budgetName,
+        description: 'Revision editor browser fixture',
+        type: 'EXPENSE',
+        currency: 'MXN',
+        clientRequestId: `budget-revision-editor-${fixture}`,
+        timeZone: 'America/Mexico_City',
+        initialRevision: {
+          targetAmount: 100,
+          intervalCount: 1,
+          intervalUnit: 'MONTH',
+          alignment: 'ANCHORED',
+          anchorDate: '2026-11-01',
+          customDayOfMonth: null,
+          recurrenceMode: 'RECURRING',
+          termination: 'NONE',
+          terminationPeriodCount: null,
+          recurrenceEndDate: null,
+          accountScopeMode: 'SELECTED',
+          accountIds: [isolatedAccount.id],
+          categoryScopeMode: 'SELECTED',
+          categoryIds: [isolatedExpenseRoot.id],
+          tagScopeMode: 'NONE',
+          tagIds: [],
+          tagMatchMode: 'ANY',
+        },
+      },
+    }).then(({ body, status }) => {
+      expect(status).to.equal(201);
+      budgetId = body.id;
+      cy.visit(`/budgets/${budgetId}?referenceDate=${currentDate}`);
+    });
+
+    cy.get('[data-cy="editBudget"]').click();
+    cy.location('pathname').should('match', /^\/budgets\/\d+\/edit$/);
+    cy.get('[data-cy="budgetEditAmount"]').should('have.value', '100');
+    cy.get('[data-cy="budgetEditAmount"]').clear();
+    cy.get('[data-cy="budgetEditAmount"]').type('200');
+    cy.contains('label', /Current period|Período actual/).click();
+    cy.get('[data-cy="reviewBudgetRevision"]').click();
+    cy.get('[data-cy="budgetRevisionReview"]').should('contain.text', '2026');
+    cy.intercept('POST', '/api/budgets/*/revisions').as('applyCurrentRevision');
+    cy.get('[data-cy="confirmBudgetRevision"]').click();
+    cy.wait('@applyCurrentRevision').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.include({ applyToCurrentPeriod: true });
+      expect(request.body.revision).to.deep.include({
+        targetAmount: 200,
+        accountIds: [isolatedAccount.id],
+        categoryIds: [isolatedExpenseRoot.id],
+      });
+    });
+    cy.get('[data-cy="budgetEditNotice"]')
+      .invoke('text')
+      .should('match', /current period|período actual/i);
+    cy.get('[data-cy="backToBudgetDetail"]').click();
+    cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '200.00');
+    cy.get('[data-cy="budgetDetailActual"]').should('contain.text', '50.00');
+
+    cy.get('[data-cy="editBudget"]').click();
+    cy.get('[data-cy="budgetEditAmount"]').clear();
+    cy.get('[data-cy="budgetEditAmount"]').type('300');
+    cy.contains('label', /Future period|Período futuro/).click();
+    cy.get('[data-cy="budgetEditFuturePeriod"]').then(select => {
+      futureStart = String(select.val());
+    });
+    cy.get('[data-cy="reviewBudgetRevision"]').click();
+    cy.intercept('POST', '/api/budgets/*/revisions').as('scheduleFutureRevision');
+    cy.get('[data-cy="confirmBudgetRevision"]').click();
+    cy.wait('@scheduleFutureRevision').then(({ request, response }) => {
+      expect(response?.statusCode).to.equal(200);
+      expect(request.body).to.include({ applyToCurrentPeriod: false, effectivePeriodStart: futureStart });
+      expect(request.body.revision.targetAmount).to.equal(300);
+    });
+    cy.get('[data-cy^="pendingRevision-"]')
+      .should('have.length', 1)
+      .then(card => {
+        const scheduleId = card.attr('data-cy')?.replace('pendingRevision-', '');
+        expect(scheduleId).to.match(/^\d+$/);
+        cy.screenshot('budget-5b-b-revision-editor-desktop', { capture: 'viewport' });
+        cy.viewport('iphone-6');
+        cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(375));
+        cy.screenshot('budget-5b-b-revision-editor-mobile', { capture: 'viewport' });
+        cy.viewport(1440, 960);
+        cy.get(`[data-cy="cancelPendingRevision-${scheduleId}"]`).click();
+        cy.get('[data-cy="confirmCancelPendingRevision"]').click();
+        cy.authenticatedRequest({ method: 'GET', url: `/api/budgets/${budgetId}/history` }).then(({ body, status }) => {
+          expect(status).to.equal(200);
+          expect(
+            body.schedules.some(
+              (schedule: { effectivePeriodStart: string; active: boolean }) =>
+                schedule.effectivePeriodStart === futureStart && schedule.active,
+            ),
+          ).to.equal(false);
+        });
+      });
   });
 });

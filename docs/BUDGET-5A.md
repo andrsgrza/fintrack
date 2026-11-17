@@ -55,9 +55,10 @@ mes. Esta página mantiene el alcance de la primera UI; el contrato de calendari
 
 ## UI y límites de fase
 
-La ruta `/budgets` muestra el resumen, fecha de referencia y filtros; `/budgets/:budgetId` sólo enfoca su tarjeta
-dentro del mismo resumen. Esto no constituye todavía una pantalla de detalle/historial B5B. Las tarjetas no exponen
-acciones de pausa, finalización, edición o cambios de calendario.
+La ruta `/budgets` muestra el resumen, fecha de referencia y filtros. Desde BUDGET-5B-A, cada tarjeta abre la
+consulta de detalle en `/budgets/:budgetId`; sus períodos, configuración histórica e historial están documentados en
+[`BUDGET-5B-A.md`](BUDGET-5B-A.md). Las tarjetas no exponen acciones de pausa, finalización, edición o cambios de
+calendario.
 
 Se reutilizan los selectores owner-scoped de cuentas, categorías y `ProductTagSelector`; no se crean catálogos o
 almacenamientos paralelos.
