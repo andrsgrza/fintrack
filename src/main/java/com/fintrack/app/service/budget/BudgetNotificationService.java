@@ -88,7 +88,7 @@ public class BudgetNotificationService {
                 notification.getId(),
                 notification.getBudget().getId(),
                 notification.getNotificationType(),
-                objectMapper.readValue(notification.getSnapshotJson(), BudgetThresholdNotificationSnapshot.class),
+                objectMapper.readTree(notification.getSnapshotJson()),
                 notification.getEventAt(),
                 notification.getMaterializedAt(),
                 notification.getReadAt()

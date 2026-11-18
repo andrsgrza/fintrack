@@ -62,6 +62,12 @@ class BudgetCommandServiceTest {
     private BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository;
 
     @Mock
+    private BudgetPeriodCloseCursorRepository periodCloseCursorRepository;
+
+    @Mock
+    private BudgetPeriodCloseWorkItemRepository periodCloseWorkItemRepository;
+
+    @Mock
     private FinancialAccountRepository financialAccountRepository;
 
     @Mock
@@ -78,6 +84,9 @@ class BudgetCommandServiceTest {
 
     @Mock
     private BudgetTimeZoneService budgetTimeZoneService;
+
+    @Mock
+    private BudgetPeriodCloseCursorService periodCloseCursorService;
 
     private final List<BudgetRevisionSchedule> schedules = new ArrayList<>();
     private final List<BudgetLifecycleEvent> events = new ArrayList<>();
@@ -119,12 +128,15 @@ class BudgetCommandServiceTest {
             notificationOutboxRepository,
             notificationRepository,
             timeZoneAssignmentRepository,
+            periodCloseCursorRepository,
+            periodCloseWorkItemRepository,
             financialAccountRepository,
             categoryRepository,
             tagRepository,
             userRepository,
             currentUserService,
             budgetTimeZoneService,
+            periodCloseCursorService,
             CLOCK
         );
         when(currentUserService.getCurrentUserLogin()).thenReturn(OWNER);

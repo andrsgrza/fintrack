@@ -43,12 +43,15 @@ public class BudgetCommandService {
     private final BudgetNotificationOutboxRepository notificationOutboxRepository;
     private final BudgetNotificationRepository notificationRepository;
     private final BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository;
+    private final BudgetPeriodCloseCursorRepository periodCloseCursorRepository;
+    private final BudgetPeriodCloseWorkItemRepository periodCloseWorkItemRepository;
     private final FinancialAccountRepository financialAccountRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final BudgetTimeZoneService budgetTimeZoneService;
+    private final BudgetPeriodCloseCursorService periodCloseCursorService;
     private final Clock clock;
 
     public BudgetCommandService(
@@ -62,12 +65,15 @@ public class BudgetCommandService {
         BudgetNotificationOutboxRepository notificationOutboxRepository,
         BudgetNotificationRepository notificationRepository,
         BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository,
+        BudgetPeriodCloseCursorRepository periodCloseCursorRepository,
+        BudgetPeriodCloseWorkItemRepository periodCloseWorkItemRepository,
         FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
         UserRepository userRepository,
         CurrentUserService currentUserService,
         BudgetTimeZoneService budgetTimeZoneService,
+        BudgetPeriodCloseCursorService periodCloseCursorService,
         Clock clock
     ) {
         this.budgetRepository = budgetRepository;
@@ -80,12 +86,15 @@ public class BudgetCommandService {
         this.notificationOutboxRepository = notificationOutboxRepository;
         this.notificationRepository = notificationRepository;
         this.timeZoneAssignmentRepository = timeZoneAssignmentRepository;
+        this.periodCloseCursorRepository = periodCloseCursorRepository;
+        this.periodCloseWorkItemRepository = periodCloseWorkItemRepository;
         this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
         this.budgetTimeZoneService = budgetTimeZoneService;
+        this.periodCloseCursorService = periodCloseCursorService;
         this.clock = clock;
     }
 
@@ -217,6 +226,8 @@ public class BudgetCommandService {
         receiptRepository.deleteByBudgetId(budgetId);
         // Notification evidence belongs exclusively to the deleted Budget. Financial transactions and shared scope
         // references remain untouched; deleting a Budget can never mutate financial data.
+        periodCloseWorkItemRepository.deleteByBudgetId(budgetId);
+        periodCloseCursorRepository.deleteByBudgetId(budgetId);
         notificationRepository.deleteByBudgetId(budgetId);
         notificationOutboxRepository.deleteByBudgetId(budgetId);
         thresholdClaimRepository.deleteByBudgetId(budgetId);
@@ -362,6 +373,7 @@ public class BudgetCommandService {
         receiptRepository.saveAndFlush(
             BudgetCommandReceipt.record(budget, type, requestId, digest, scheduleId, lifecycleId, budget.getVersion(), now)
         );
+        periodCloseCursorService.synchronize(budget);
         Long revisionId = scheduleId == null
             ? null
             : scheduleRepository

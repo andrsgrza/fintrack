@@ -23,8 +23,10 @@ public interface BudgetNotificationPreferenceRepository extends JpaRepository<Bu
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(
-        "select distinct preference from BudgetNotificationPreference preference " +
-        "join fetch preference.budget budget left join fetch preference.thresholds " +
+        // PostgreSQL cannot lock the nullable side of a collection fetch join. The preference is the sole
+        // mutation lock here; thresholds remain available lazily inside the surrounding transaction.
+        "select preference from BudgetNotificationPreference preference " +
+        "join fetch preference.budget budget " +
         "where budget.id = :budgetId and budget.user.login = :login"
     )
     Optional<BudgetNotificationPreference> findOneForOwnedMutation(@Param("budgetId") Long budgetId, @Param("login") String login);

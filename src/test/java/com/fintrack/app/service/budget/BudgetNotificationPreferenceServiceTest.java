@@ -57,6 +57,9 @@ class BudgetNotificationPreferenceServiceTest {
     @Mock
     private BudgetTimeZoneService budgetTimeZoneService;
 
+    @Mock
+    private BudgetPeriodCloseCursorService periodCloseCursorService;
+
     private BudgetNotificationPreferenceService service;
     private Budget budget;
 
@@ -75,6 +78,7 @@ class BudgetNotificationPreferenceServiceTest {
             userRepository,
             currentUserService,
             budgetTimeZoneService,
+            periodCloseCursorService,
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
         lenient().when(currentUserService.getCurrentUserLogin()).thenReturn("owner");

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261118090000-1-budget-period-close-processing" author="fintrack">
+        <addColumn tableName="budget_notification_outbox">
+            <!-- Existing outbox rows are threshold events; preserving that fact keeps their immutable snapshots valid. -->
+            <column name="notification_type" type="varchar(40)" defaultValue="THRESHOLD_CROSSED"><constraints nullable="false"/></column>
+        </addColumn>
+
+        <createTable tableName="budget_period_close_cursor" remarks="Replaceable per-Budget projection of the next logical closing due for discovery.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false" unique="true"/></column>
+            <column name="next_period_start" type="date"><constraints nullable="false"/></column>
+            <column name="next_due_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_period_close_cursor" baseColumnNames="budget_id" constraintName="fk_budget_period_close_cursor__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="budget_period_close_cursor" columnNames="budget_id" constraintName="ux_budget_period_close_cursor_budget"/>
+        <createIndex tableName="budget_period_close_cursor" indexName="ix_budget_period_close_cursor_due"><column name="next_due_at"/><column name="budget_id"/></createIndex>
+
+        <createTable tableName="budget_period_close_work_item" remarks="Durable execution evidence for one Budget and one closing period.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="period_start" type="date"><constraints nullable="false"/></column>
+            <column name="period_end_exclusive" type="date"><constraints nullable="false"/></column>
+            <column name="period_time_zone" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="logical_closed_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="state" type="varchar(24)"><constraints nullable="false"/></column>
+            <column name="attempt_count" type="int"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="lease_until" type="${datetimeType}"/>
+            <column name="last_error" type="varchar(1000)"/>
+            <column name="captured_at" type="${datetimeType}"/>
+            <column name="outbox_event_id" type="bigint"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_period_close_work_item" baseColumnNames="budget_id" constraintName="fk_budget_period_close_work__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_period_close_work_item" baseColumnNames="outbox_event_id" constraintName="fk_budget_period_close_work__outbox" referencedTableName="budget_notification_outbox" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="budget_period_close_work_item" columnNames="budget_id,period_start" constraintName="ux_budget_period_close_work_period"/>
+        <addUniqueConstraint tableName="budget_period_close_work_item" columnNames="outbox_event_id" constraintName="ux_budget_period_close_work_outbox"/>
+        <createIndex tableName="budget_period_close_work_item" indexName="ix_budget_period_close_work_due"><column name="state"/><column name="next_attempt_at"/><column name="logical_closed_at"/><column name="id"/></createIndex>
+        <createIndex tableName="budget_period_close_work_item" indexName="ix_budget_period_close_work_lease"><column name="state"/><column name="lease_until"/><column name="id"/></createIndex>
+        <createIndex tableName="budget_period_close_work_item" indexName="ix_budget_period_close_work_budget_period"><column name="budget_id"/><column name="period_start"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

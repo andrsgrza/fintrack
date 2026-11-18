@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.BudgetNotification;
 import com.fintrack.app.domain.BudgetNotificationOutbox;
@@ -13,10 +14,8 @@ import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.BudgetNotificationRepository;
 import com.fintrack.app.service.CurrentUserService;
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -44,7 +43,6 @@ class BudgetNotificationServiceTest {
 
     private BudgetNotificationService service;
     private BudgetNotification notification;
-    private BudgetThresholdNotificationSnapshot snapshot;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -56,27 +54,8 @@ class BudgetNotificationServiceTest {
         BudgetNotificationOutbox outbox = BudgetNotificationOutbox.pending(owner, budget, "transaction:1", "{}", NOW);
         notification = BudgetNotification.materialize(outbox, NOW);
         ReflectionTestUtils.setField(notification, "id", 13L);
-        snapshot = new BudgetThresholdNotificationSnapshot(
-            1L,
-            8L,
-            "Food",
-            BudgetType.EXPENSE,
-            CurrencyCode.MXN,
-            LocalDate.of(2026, 3, 1),
-            LocalDate.of(2026, 4, 1),
-            "America/Mexico_City",
-            NOW,
-            BigDecimal.ZERO,
-            BigDecimal.ZERO,
-            new BigDecimal("850.00"),
-            new BigDecimal("85.0000"),
-            new BigDecimal("1000.00"),
-            List.of(new BigDecimal("80.0000")),
-            "transaction:1",
-            2L
-        );
         when(currentUserService.getCurrentUserLogin()).thenReturn("owner");
-        lenient().when(objectMapper.readValue("{}", BudgetThresholdNotificationSnapshot.class)).thenReturn(snapshot);
+        lenient().when(objectMapper.readTree("{}")).thenReturn(JsonNodeFactory.instance.objectNode().put("budgetName", "Food"));
         service = new BudgetNotificationService(notificationRepository, currentUserService, objectMapper, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -103,7 +82,7 @@ class BudgetNotificationServiceTest {
             .singleElement()
             .satisfies(view -> {
                 assertThat(view.budgetId()).isEqualTo(8L);
-                assertThat(view.snapshot().budgetName()).isEqualTo("Food");
+                assertThat(view.snapshot().path("budgetName").asText()).isEqualTo("Food");
                 assertThat(view.readAt()).isNull();
             });
     }

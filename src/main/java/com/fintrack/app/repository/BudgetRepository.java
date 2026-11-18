@@ -1,9 +1,11 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.Budget;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -39,6 +41,15 @@ public interface BudgetRepository extends JpaRepository<Budget, Long> {
         "where b.id = :id and b.user.login = :login"
     )
     Optional<Budget> findOneForEvaluationByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
+
+    /** Locks the aggregate root while a scheduled close captures its immutable financial evidence. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        // PostgreSQL cannot apply FOR UPDATE to the nullable side of collection fetch joins. The capture path
+        // locks only the aggregate root (after its owner), then reads immutable revision history separately.
+        "select b from Budget b join fetch b.user " + "where b.id = :id and b.user.login = :login"
+    )
+    Optional<Budget> findOneForPeriodCloseCaptureByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     /**
      * Owner-scoped overview read. Scope selections travel with immutable revisions so an overview never needs to

@@ -1,6 +1,7 @@
 package com.fintrack.app.domain;
 
 import com.fintrack.app.domain.enumeration.BudgetNotificationOutboxState;
+import com.fintrack.app.domain.enumeration.BudgetNotificationType;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import java.io.Serializable;
@@ -35,6 +36,11 @@ public class BudgetNotificationOutbox implements Serializable {
     @NotNull
     @Column(name = "source_mutation_key", length = 200, nullable = false, updatable = false)
     private String sourceMutationKey;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "notification_type", length = 40, nullable = false, updatable = false)
+    private BudgetNotificationType notificationType;
 
     @NotNull
     @Column(name = "snapshot_json", columnDefinition = "text", nullable = false, updatable = false)
@@ -72,9 +78,22 @@ public class BudgetNotificationOutbox implements Serializable {
         String snapshotJson,
         Instant eventAt
     ) {
+        return pending(user, budget, BudgetNotificationType.THRESHOLD_CROSSED, sourceMutationKey, snapshotJson, eventAt);
+    }
+
+    public static BudgetNotificationOutbox pending(
+        User user,
+        Budget budget,
+        BudgetNotificationType notificationType,
+        String sourceMutationKey,
+        String snapshotJson,
+        Instant eventAt
+    ) {
+        if (notificationType == null) throw new IllegalArgumentException("A Budget notification type is required.");
         BudgetNotificationOutbox event = new BudgetNotificationOutbox();
         event.user = user;
         event.budget = budget;
+        event.notificationType = notificationType;
         event.sourceMutationKey = sourceMutationKey;
         event.snapshotJson = snapshotJson;
         event.eventAt = eventAt;
@@ -110,6 +129,10 @@ public class BudgetNotificationOutbox implements Serializable {
 
     public String getSourceMutationKey() {
         return sourceMutationKey;
+    }
+
+    public BudgetNotificationType getNotificationType() {
+        return notificationType;
     }
 
     public String getSnapshotJson() {

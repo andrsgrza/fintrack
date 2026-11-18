@@ -131,6 +131,25 @@ public class BudgetEvaluationService {
         }
     }
 
+    /**
+     * Narrow server-only capture path for a known closed period. The caller supplies a durable historical period
+     * zone; this method deliberately does not consult a browser or fall back to the current profile preference.
+     */
+    BudgetEvaluationResult evaluateClosedPeriodForNotification(Budget budget, long periodIndex, ZoneId periodZone) {
+        if (budget == null || budget.getId() == null || periodIndex < 0 || periodZone == null) {
+            throw invalidPeriod("A Budget, closed period, and authoritative time zone are required.");
+        }
+        List<BudgetRevisionSchedule> schedules = scheduleRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
+        List<BudgetLifecycleEvent> events = lifecycleEventRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
+        try {
+            LocalDate today = LocalDate.now(clock.withZone(periodZone));
+            EvaluationContext context = new EvaluationContext(budget, new BudgetTimeline(schedules, events), periodZone, today);
+            return evaluate(context, operational(context, periodIndex), periodZone);
+        } catch (IllegalArgumentException exception) {
+            throw invalidPeriod("The Budget's immutable schedule is invalid.");
+        }
+    }
+
     private BudgetEvaluationResult atDate(EvaluationContext context, LocalDate referenceDate) {
         BudgetPeriod period = context
             .timeline()
@@ -155,9 +174,19 @@ public class BudgetEvaluationService {
     }
 
     private BudgetEvaluationResult evaluate(EvaluationContext context, BudgetTimeline.OperationalPeriod operational) {
+        return evaluate(context, operational, null);
+    }
+
+    private BudgetEvaluationResult evaluate(
+        EvaluationContext context,
+        BudgetTimeline.OperationalPeriod operational,
+        ZoneId authoritativePeriodZone
+    ) {
         Budget budget = context.budget();
         BudgetPeriod period = operational.period();
-        ZoneId periodZone = budgetTimeZoneService.resolveZoneForEvaluation(budget, period.startInclusive());
+        ZoneId periodZone = authoritativePeriodZone == null
+            ? budgetTimeZoneService.resolveZoneForEvaluation(budget, period.startInclusive())
+            : authoritativePeriodZone;
         BudgetEvaluationPeriodTiming timing = timing(period, LocalDate.now(clock.withZone(periodZone)));
         BudgetRevision revision = operational.revision();
         BigDecimal target = revision.getTargetAmount();

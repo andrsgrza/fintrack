@@ -27,6 +27,27 @@ export const NotificationContent = ({
       </span>
     );
   }
+  if (notification.notificationType === 'PERIOD_CLOSED') {
+    return (
+      <div className="notification-content">
+        <div className="fw-semibold text-break">{snapshot.budgetName}</div>
+        <div className="small text-muted">{copy(locale, 'Cierre de período registrado', 'Period close recorded')}</div>
+        {!compact && (
+          <div className="small mt-1 text-muted">
+            {copy(locale, 'Periodo', 'Period')}: {dateRange(snapshot.periodStart, snapshot.periodEndExclusive, locale)}
+          </div>
+        )}
+        <div className="small text-muted mt-1">{formatEventDate(notification.eventAt, locale, snapshot.timeZone)}</div>
+      </div>
+    );
+  }
+  if (!('newAmount' in snapshot)) {
+    return (
+      <span className="small text-muted">
+        {copy(locale, 'Notificación histórica no disponible.', 'Historical notification is unavailable.')}
+      </span>
+    );
+  }
   const isExpense = snapshot.budgetType === 'EXPENSE';
   const amountLabel = isExpense
     ? copy(locale, 'Gasto registrado', 'Expense recorded')

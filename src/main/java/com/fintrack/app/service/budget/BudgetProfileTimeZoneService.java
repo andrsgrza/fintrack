@@ -1,6 +1,7 @@
 package com.fintrack.app.service.budget;
 
 import com.fintrack.app.domain.User;
+import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.time.DateTimeException;
 import java.time.ZoneId;
@@ -14,10 +15,19 @@ public class BudgetProfileTimeZoneService {
 
     private final CurrentUserService currentUserService;
     private final BudgetTimeZoneService budgetTimeZoneService;
+    private final BudgetRepository budgetRepository;
+    private final BudgetPeriodCloseCursorService periodCloseCursorService;
 
-    public BudgetProfileTimeZoneService(CurrentUserService currentUserService, BudgetTimeZoneService budgetTimeZoneService) {
+    public BudgetProfileTimeZoneService(
+        CurrentUserService currentUserService,
+        BudgetTimeZoneService budgetTimeZoneService,
+        BudgetRepository budgetRepository,
+        BudgetPeriodCloseCursorService periodCloseCursorService
+    ) {
         this.currentUserService = currentUserService;
         this.budgetTimeZoneService = budgetTimeZoneService;
+        this.budgetRepository = budgetRepository;
+        this.periodCloseCursorService = periodCloseCursorService;
     }
 
     @Transactional(readOnly = true)
@@ -38,6 +48,7 @@ public class BudgetProfileTimeZoneService {
                 new BudgetProfileTimeZoneView.EffectiveChange(change.budgetId(), change.budgetName(), change.effectivePeriodStart())
             )
             .toList();
+        changes.forEach(change -> budgetRepository.findById(change.budgetId()).ifPresent(periodCloseCursorService::synchronize));
         return new BudgetProfileTimeZoneView(requested, false, changes);
     }
 

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.User;
+import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.time.LocalDate;
 import java.util.List;
@@ -22,6 +23,12 @@ class BudgetProfileTimeZoneServiceTest {
 
     @Mock
     private BudgetTimeZoneService budgetTimeZoneService;
+
+    @Mock
+    private BudgetRepository budgetRepository;
+
+    @Mock
+    private BudgetPeriodCloseCursorService periodCloseCursorService;
 
     @Test
     void reports_missing_profile_configuration_without_persisting_a_browser_suggestion() {
@@ -67,6 +74,6 @@ class BudgetProfileTimeZoneServiceTest {
     }
 
     private BudgetProfileTimeZoneService service() {
-        return new BudgetProfileTimeZoneService(currentUserService, budgetTimeZoneService);
+        return new BudgetProfileTimeZoneService(currentUserService, budgetTimeZoneService, budgetRepository, periodCloseCursorService);
     }
 }

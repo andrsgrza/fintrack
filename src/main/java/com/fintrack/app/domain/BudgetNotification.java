@@ -62,7 +62,7 @@ public class BudgetNotification implements Serializable {
         notification.user = event.getUser();
         notification.budget = event.getBudget();
         notification.outboxEvent = event;
-        notification.notificationType = BudgetNotificationType.THRESHOLD_CROSSED;
+        notification.notificationType = event.getNotificationType();
         notification.snapshotJson = event.getSnapshotJson();
         notification.eventAt = event.getEventAt();
         notification.materializedAt = now;

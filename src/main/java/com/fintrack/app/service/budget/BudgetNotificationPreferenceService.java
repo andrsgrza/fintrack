@@ -39,6 +39,7 @@ public class BudgetNotificationPreferenceService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final BudgetTimeZoneService budgetTimeZoneService;
+    private final BudgetPeriodCloseCursorService periodCloseCursorService;
     private final Clock clock;
 
     public BudgetNotificationPreferenceService(
@@ -49,6 +50,7 @@ public class BudgetNotificationPreferenceService {
         UserRepository userRepository,
         CurrentUserService currentUserService,
         BudgetTimeZoneService budgetTimeZoneService,
+        BudgetPeriodCloseCursorService periodCloseCursorService,
         Clock clock
     ) {
         this.budgetRepository = budgetRepository;
@@ -58,6 +60,7 @@ public class BudgetNotificationPreferenceService {
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
         this.budgetTimeZoneService = budgetTimeZoneService;
+        this.periodCloseCursorService = periodCloseCursorService;
         this.clock = clock;
     }
 
@@ -96,7 +99,9 @@ public class BudgetNotificationPreferenceService {
             }
             preference.replace(command.percentageAlertsEnabled(), command.periodCloseEnabled(), thresholds, now);
         }
-        return view(preferenceRepository.saveAndFlush(preference));
+        BudgetNotificationPreference saved = preferenceRepository.saveAndFlush(preference);
+        periodCloseCursorService.synchronize(budget);
+        return view(saved);
     }
 
     /**
@@ -130,6 +135,7 @@ public class BudgetNotificationPreferenceService {
             now
         );
         preferenceRepository.saveAndFlush(preference);
+        periodCloseCursorService.synchronize(budget);
     }
 
     private Set<BigDecimal> normalize(Set<BigDecimal> supplied) {

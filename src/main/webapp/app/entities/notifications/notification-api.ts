@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-export type BudgetNotificationSnapshot = {
+export type BudgetThresholdNotificationSnapshot = {
   budgetId: number;
   budgetName: string;
   budgetType: 'EXPENSE' | 'INCOME';
@@ -14,6 +14,26 @@ export type BudgetNotificationSnapshot = {
   targetAmount: number;
   newlyCrossedPercentages: number[];
 };
+
+export type BudgetPeriodCloseNotificationSnapshot = {
+  budgetId: number;
+  budgetName: string;
+  budgetType: 'EXPENSE' | 'INCOME';
+  currency: string;
+  periodStart: string;
+  periodEndExclusive: string;
+  timeZone: string;
+  revisionId: number;
+  targetAmount: number;
+  actualAmount: number;
+  progressPercentage: number;
+  evaluationStatus: string;
+  logicalClosedAt: string;
+  capturedAt: string;
+  logicalEventKey: string;
+};
+
+export type BudgetNotificationSnapshot = BudgetThresholdNotificationSnapshot | BudgetPeriodCloseNotificationSnapshot;
 
 export type BudgetNotification = {
   id: number;
