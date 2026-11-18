@@ -76,6 +76,9 @@ class BudgetCommandServiceTest {
     @Mock
     private CurrentUserService currentUserService;
 
+    @Mock
+    private BudgetTimeZoneService budgetTimeZoneService;
+
     private final List<BudgetRevisionSchedule> schedules = new ArrayList<>();
     private final List<BudgetLifecycleEvent> events = new ArrayList<>();
     private final List<BudgetCommandReceipt> receipts = new ArrayList<>();
@@ -121,9 +124,13 @@ class BudgetCommandServiceTest {
             tagRepository,
             userRepository,
             currentUserService,
+            budgetTimeZoneService,
             CLOCK
         );
         when(currentUserService.getCurrentUserLogin()).thenReturn(OWNER);
+        lenient()
+            .when(budgetTimeZoneService.resolveCurrentZoneForEvaluation(budget))
+            .thenReturn(java.time.ZoneId.of("America/Mexico_City"));
         lenient().when(userRepository.findOneForBudgetNotificationMutationByLogin(OWNER)).thenReturn(Optional.of(user));
         when(budgetRepository.findOneByIdAndUserLogin(7L, OWNER)).thenReturn(Optional.of(budget));
         lenient().when(revisionRepository.findAllByBudgetIdOrderByRevisionNumber(7L)).thenAnswer(invocation -> budget.getRevisions());

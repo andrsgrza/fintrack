@@ -9,7 +9,7 @@ import com.fintrack.app.repository.BudgetLifecycleEventRepository;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.service.CurrentUserService;
-import java.time.DateTimeException;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -32,31 +32,36 @@ public class BudgetOverviewService {
     private final BudgetLifecycleEventRepository lifecycleEventRepository;
     private final CurrentUserService currentUserService;
     private final BudgetEvaluationService evaluationService;
+    private final BudgetTimeZoneService budgetTimeZoneService;
+    private final Clock clock;
 
     public BudgetOverviewService(
         BudgetRepository budgetRepository,
         BudgetRevisionScheduleRepository scheduleRepository,
         BudgetLifecycleEventRepository lifecycleEventRepository,
         CurrentUserService currentUserService,
-        BudgetEvaluationService evaluationService
+        BudgetEvaluationService evaluationService,
+        BudgetTimeZoneService budgetTimeZoneService,
+        Clock clock
     ) {
         this.budgetRepository = budgetRepository;
         this.scheduleRepository = scheduleRepository;
         this.lifecycleEventRepository = lifecycleEventRepository;
         this.currentUserService = currentUserService;
         this.evaluationService = evaluationService;
+        this.budgetTimeZoneService = budgetTimeZoneService;
+        this.clock = clock;
     }
 
     public BudgetOverview overview(
         LocalDate referenceDate,
-        String timeZone,
+        String ignoredClientTimeZone,
         BudgetType type,
         BudgetPeriodOperationalStatus operationalStatus
     ) {
-        if (referenceDate == null) throw invalidPeriod("A reference date is required.");
-        validateZone(timeZone);
         List<Budget> budgets = budgetRepository.findAllForOverviewByUserLogin(currentUserService.getCurrentUserLogin());
-        if (budgets.isEmpty()) return new BudgetOverview(referenceDate, timeZone, List.of());
+        if (budgets.isEmpty()) return new BudgetOverview(referenceDate, null, List.of());
+        String profileTimeZone = budgets.get(0).getUser().getTimeZone();
 
         List<Long> ids = budgets.stream().map(Budget::getId).toList();
         Map<Long, List<BudgetRevisionSchedule>> schedules = scheduleRepository
@@ -76,13 +81,23 @@ public class BudgetOverviewService {
                     budget,
                     schedules.getOrDefault(budget.getId(), List.of()),
                     events.getOrDefault(budget.getId(), List.of()),
-                    referenceDate,
-                    timeZone
+                    effectiveReferenceDate(budget, referenceDate),
+                    ignoredClientTimeZone
                 )
             )
             .filter(item -> operationalStatus == null || item.operationalStatus() == operationalStatus)
             .toList();
-        return new BudgetOverview(referenceDate, timeZone, items);
+        return new BudgetOverview(referenceDate, profileTimeZone, items);
+    }
+
+    /**
+     * The unfiltered overview's current cards are not based on the browser date. Budgets may legitimately retain
+     * different effective zones while a profile change awaits their next calendar boundaries.
+     */
+    private LocalDate effectiveReferenceDate(Budget budget, LocalDate requestedReferenceDate) {
+        if (requestedReferenceDate != null) return requestedReferenceDate;
+        ZoneId zone = budgetTimeZoneService.resolveCurrentZoneForEvaluation(budget);
+        return LocalDate.now(clock.withZone(zone));
     }
 
     private BudgetOverviewItem item(
@@ -90,7 +105,7 @@ public class BudgetOverviewService {
         List<BudgetRevisionSchedule> schedules,
         List<BudgetLifecycleEvent> events,
         LocalDate referenceDate,
-        String timeZone
+        String ignoredClientTimeZone
     ) {
         final BudgetTimeline timeline;
         try {
@@ -136,7 +151,7 @@ public class BudgetOverviewService {
             schedules,
             events,
             referenceDate,
-            timeZone
+            ignoredClientTimeZone
         );
         return new BudgetOverviewItem(
             budget.getId(),
@@ -151,23 +166,7 @@ public class BudgetOverviewService {
         );
     }
 
-    private void validateZone(String value) {
-        try {
-            if (value == null || value.isBlank()) throw invalidTimeZone();
-            ZoneId.of(value.trim());
-        } catch (DateTimeException exception) {
-            throw invalidTimeZone();
-        }
-    }
-
     private static BudgetEvaluationException invalidPeriod(String message) {
         return new BudgetEvaluationException(BudgetEvaluationException.Code.INVALID_PERIOD, message);
-    }
-
-    private static BudgetEvaluationException invalidTimeZone() {
-        return new BudgetEvaluationException(
-            BudgetEvaluationException.Code.INVALID_TIME_ZONE,
-            "timeZone must be a valid IANA zone identifier."
-        );
     }
 }

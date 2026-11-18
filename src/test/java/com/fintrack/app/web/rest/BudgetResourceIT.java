@@ -27,6 +27,7 @@ import com.fintrack.app.domain.enumeration.BudgetTagMatchMode;
 import com.fintrack.app.domain.enumeration.BudgetTagScopeMode;
 import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.repository.BudgetNotificationPreferenceRepository;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.budget.BudgetCalendarPreviewCommand;
@@ -35,6 +36,7 @@ import com.fintrack.app.service.budget.BudgetDeleteCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
 import com.fintrack.app.service.budget.BudgetLifecycleCommand;
 import com.fintrack.app.service.budget.BudgetMetadataUpdateCommand;
+import com.fintrack.app.service.budget.BudgetNotificationPreferenceInput;
 import com.fintrack.app.service.budget.BudgetNotificationPreferenceUpdateCommand;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
 import com.fintrack.app.service.budget.BudgetVersionedCommand;
@@ -76,6 +78,9 @@ class BudgetResourceIT {
 
     @Autowired
     private BudgetRepository budgetRepository;
+
+    @Autowired
+    private BudgetNotificationPreferenceRepository notificationPreferenceRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -166,7 +171,7 @@ class BudgetResourceIT {
             Set.of(new BigDecimal("50.0000"), new BigDecimal("100.0000")),
             false
         );
-        restBudgetMockMvc
+        String createdPreference = restBudgetMockMvc
             .perform(
                 put("/api/budgets/{id}/notification-preferences", budget.getId())
                     .contentType(MediaType.APPLICATION_JSON)
@@ -175,7 +180,32 @@ class BudgetResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.configured").value(true))
             .andExpect(jsonPath("$.percentageAlertsEnabled").value(true))
-            .andExpect(jsonPath("$.thresholdPercentages.length()").value(2));
+            .andExpect(jsonPath("$.thresholdPercentages.length()").value(2))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long version = objectMapper.readTree(createdPreference).path("version").asLong();
+
+        // Replacing preferences must preserve unchanged child threshold rows. PostgreSQL enforces their unique
+        // constraint, so this detects an insert-before-orphan-delete regression in the real persistence layer.
+        restBudgetMockMvc
+            .perform(
+                put("/api/budgets/{id}/notification-preferences", budget.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        objectMapper.writeValueAsBytes(
+                            new BudgetNotificationPreferenceUpdateCommand(
+                                version,
+                                true,
+                                Set.of(new BigDecimal("50.0000"), new BigDecimal("100.0000")),
+                                false
+                            )
+                        )
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.thresholdPercentages.length()").value(2))
+            .andExpect(jsonPath("$.periodCloseEnabledSince").doesNotExist());
 
         BudgetNotificationPreferenceUpdateCommand stale = new BudgetNotificationPreferenceUpdateCommand(
             99L,
@@ -196,6 +226,71 @@ class BudgetResourceIT {
             .perform(get("/api/budgets/{id}/notification-preferences", budget.getId()).with(user(OTHER_USER_LOGIN)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+    }
+
+    @Test
+    @Transactional
+    void createsNotificationPreferencesAtomicallyAndIncludesThemInIdempotency() throws Exception {
+        BudgetCreateCommand base = command("budget-create-preferences", Set.of(), Set.of(), Set.of());
+        BudgetNotificationPreferenceInput preferences = new BudgetNotificationPreferenceInput(
+            true,
+            Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000")),
+            true
+        );
+        BudgetCreateCommand configured = new BudgetCreateCommand(
+            base.name(),
+            base.description(),
+            base.type(),
+            base.currency(),
+            base.clientRequestId(),
+            base.timeZone(),
+            base.initialRevision(),
+            preferences
+        );
+
+        String first = restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(configured)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long budgetId = objectMapper.readTree(first).path("id").asLong();
+
+        restBudgetMockMvc
+            .perform(get("/api/budgets/{id}/notification-preferences", budgetId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.configured").value(true))
+            .andExpect(jsonPath("$.percentageAlertsEnabled").value(true))
+            .andExpect(jsonPath("$.thresholdPercentages.length()").value(2))
+            .andExpect(jsonPath("$.periodCloseEnabled").value(true))
+            .andExpect(jsonPath("$.periodCloseEnabledSince").isNotEmpty());
+        assertThat(notificationPreferenceRepository.findOneByBudgetId(budgetId)).isPresent();
+
+        restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(configured)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").value(budgetId));
+        assertThat(notificationPreferenceRepository.findAll()).hasSize(1);
+
+        BudgetNotificationPreferenceInput changedPreferences = new BudgetNotificationPreferenceInput(
+            true,
+            Set.of(new BigDecimal("50.0000")),
+            false
+        );
+        BudgetCreateCommand conflict = new BudgetCreateCommand(
+            base.name(),
+            base.description(),
+            base.type(),
+            base.currency(),
+            base.clientRequestId(),
+            base.timeZone(),
+            base.initialRevision(),
+            changedPreferences
+        );
+        restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(conflict)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
     }
 
     @Test

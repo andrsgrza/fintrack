@@ -11,6 +11,8 @@ import {
   getBudgetOperationalPeriods,
   getBudgetOverview,
   cancelBudgetPause,
+  getBudgetNotificationPreferences,
+  updateBudgetNotificationPreferences,
 } from './budget-api';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -29,6 +31,8 @@ jest.mock('./budget-api', () => ({
   requestBudgetResume: jest.fn(),
   requestBudgetFinish: jest.fn(),
   deleteBudget: jest.fn(),
+  getBudgetNotificationPreferences: jest.fn(),
+  updateBudgetNotificationPreferences: jest.fn(),
 }));
 jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
   getSelectableFinancialAccounts: jest.fn(),
@@ -43,6 +47,8 @@ const mockLifecycleHistory = getBudgetHistory as jest.Mock;
 const mockCurrentEvaluation = getBudgetCurrentEvaluation as jest.Mock;
 const mockOperationalPeriods = getBudgetOperationalPeriods as jest.Mock;
 const mockCancelPause = cancelBudgetPause as jest.Mock;
+const mockNotificationPreferences = getBudgetNotificationPreferences as jest.Mock;
+const mockUpdateNotificationPreferences = updateBudgetNotificationPreferences as jest.Mock;
 const mockAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockCategories = getSelectableCategories as jest.Mock;
 const mockTags = getSelectableTags as jest.Mock;
@@ -141,6 +147,26 @@ describe('BudgetDetail', () => {
       },
     ]);
     mockCancelPause.mockResolvedValue(undefined);
+    mockNotificationPreferences.mockResolvedValue({
+      budgetId: 10,
+      configured: true,
+      version: 3,
+      percentageAlertsEnabled: false,
+      thresholdPercentages: [],
+      periodCloseEnabled: false,
+      periodCloseEnabledSince: null,
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    mockUpdateNotificationPreferences.mockImplementation((_id, payload) =>
+      Promise.resolve({
+        budgetId: 10,
+        configured: true,
+        version: 4,
+        ...payload,
+        periodCloseEnabledSince: payload.periodCloseEnabled ? '2026-01-15T00:00:00Z' : null,
+        updatedAt: '2026-01-15T00:00:00Z',
+      }),
+    );
     mockAccounts.mockResolvedValue([{ id: 41, name: 'Cash card', accountType: 'DEBIT', currency: 'MXN', active: true }]);
     mockCategories.mockResolvedValue([{ id: 51, name: 'Food', categoryType: 'EXPENSE', active: true }]);
     mockTags.mockResolvedValue([{ id: 61, name: 'Essential', active: true }]);
@@ -222,7 +248,7 @@ describe('BudgetDetail', () => {
     renderDetail();
 
     await screen.findByText('Historic groceries');
-    await waitFor(() => expect(mockCurrentEvaluation).toHaveBeenCalledWith(10, expect.any(String)));
+    await waitFor(() => expect(mockCurrentEvaluation).toHaveBeenCalledWith(10));
     expect(byCy('budgetDetailIdentity').textContent).toContain('Paused');
     expect(byCy('budgetLifecycleActions')).toBeTruthy();
   });
@@ -255,5 +281,66 @@ describe('BudgetDetail', () => {
     fireEvent.click(byCy('budgetLifecycleActions'));
     fireEvent.click(screen.getByText('Delete budget'));
     await waitFor(() => expect(byCy('confirmBudgetLifecycle')).toBeTruthy());
+  });
+
+  it('loads, saves and cancels independent notification preference drafts using the server version', async () => {
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'Spending alerts' })).toBeTruthy();
+    fireEvent.click(byCy('budgetDetailNotificationThresholdEnabled'));
+    fireEvent.click(byCy('budgetDetailNotificationSuggestion50'));
+    fireEvent.click(byCy('budgetDetailNotificationPeriodCloseEnabled'));
+    fireEvent.click(byCy('saveBudgetNotificationPreferences'));
+
+    await waitFor(() =>
+      expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({
+          expectedVersion: 3,
+          percentageAlertsEnabled: true,
+          thresholdPercentages: [50],
+          periodCloseEnabled: true,
+        }),
+      ),
+    );
+    expect(await screen.findByText('Notification preferences saved.')).toBeTruthy();
+
+    fireEvent.click(byCy('budgetDetailNotificationThresholdEnabled'));
+    fireEvent.click(byCy('cancelBudgetNotificationPreferences'));
+    expect((byCy('budgetDetailNotificationThresholdEnabled') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('keeps an unsaved draft visible after a version conflict and requires an explicit retry', async () => {
+    mockUpdateNotificationPreferences.mockRejectedValueOnce({ response: { status: 409 } });
+    renderDetail();
+
+    await screen.findByRole('heading', { name: 'Spending alerts' });
+    fireEvent.click(byCy('budgetDetailNotificationThresholdEnabled'));
+    fireEvent.click(byCy('budgetDetailNotificationSuggestion50'));
+    fireEvent.click(byCy('saveBudgetNotificationPreferences'));
+
+    expect(await screen.findByText(/changed in another session/i)).toBeTruthy();
+    await waitFor(() => expect(mockNotificationPreferences).toHaveBeenCalledTimes(2));
+    expect((byCy('budgetDetailNotificationThresholdEnabled') as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByText('Notification preferences saved.')).toBeNull();
+  });
+
+  it('keeps paused budgets editable but renders effectively completed budgets as read-only', async () => {
+    mockCurrentEvaluation.mockResolvedValueOnce(evaluation(2, { operationalStatus: 'PAUSED', periodTiming: 'CURRENT' }));
+    const paused = renderDetail();
+    expect(await screen.findByRole('button', { name: 'Save notifications' })).toBeTruthy();
+    paused.unmount();
+
+    mockOverview.mockResolvedValue({
+      referenceDate: '2026-01-15',
+      timeZone: 'America/Mexico_City',
+      budgets: [itemFor(evaluation(0, { operationalStatus: 'COMPLETED' }))],
+    });
+    mockCurrentEvaluation.mockResolvedValue(evaluation(2, { operationalStatus: 'COMPLETED', periodTiming: 'CURRENT' }));
+    renderDetail();
+
+    expect(await screen.findByText(/can review its preferences, but cannot change them/i)).toBeTruthy();
+    expect(byCy('budgetDetailNotificationReadOnly')).toBeTruthy();
+    expect(byCy('saveBudgetNotificationPreferences')).toBeNull();
   });
 });

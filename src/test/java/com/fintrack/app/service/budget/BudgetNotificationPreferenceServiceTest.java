@@ -10,8 +10,10 @@ import com.fintrack.app.domain.BudgetNotificationPreference;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
+import com.fintrack.app.repository.BudgetLifecycleEventRepository;
 import com.fintrack.app.repository.BudgetNotificationPreferenceRepository;
 import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.math.BigDecimal;
@@ -41,10 +43,19 @@ class BudgetNotificationPreferenceServiceTest {
     private BudgetNotificationPreferenceRepository preferenceRepository;
 
     @Mock
+    private BudgetRevisionScheduleRepository scheduleRepository;
+
+    @Mock
+    private BudgetLifecycleEventRepository lifecycleEventRepository;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
     private CurrentUserService currentUserService;
+
+    @Mock
+    private BudgetTimeZoneService budgetTimeZoneService;
 
     private BudgetNotificationPreferenceService service;
     private Budget budget;
@@ -59,13 +70,16 @@ class BudgetNotificationPreferenceServiceTest {
         service = new BudgetNotificationPreferenceService(
             budgetRepository,
             preferenceRepository,
+            scheduleRepository,
+            lifecycleEventRepository,
             userRepository,
             currentUserService,
+            budgetTimeZoneService,
             Clock.fixed(NOW, ZoneOffset.UTC)
         );
-        when(currentUserService.getCurrentUserLogin()).thenReturn("owner");
-        when(userRepository.findOneForBudgetNotificationMutationByLogin("owner")).thenReturn(Optional.of(owner));
-        when(budgetRepository.findOneByIdAndUserLogin(12L, "owner")).thenReturn(Optional.of(budget));
+        lenient().when(currentUserService.getCurrentUserLogin()).thenReturn("owner");
+        lenient().when(userRepository.findOneForBudgetNotificationMutationByLogin("owner")).thenReturn(Optional.of(owner));
+        lenient().when(budgetRepository.findOneByIdAndUserLogin(12L, "owner")).thenReturn(Optional.of(budget));
     }
 
     @Test
@@ -119,5 +133,48 @@ class BudgetNotificationPreferenceServiceTest {
         assertThatThrownBy(() -> service.update(12L, command)).isInstanceOf(BudgetCommandException.class);
 
         verify(preferenceRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void startsAnImmediateCloseEpisodeOnlyOnAGenuineOffToOnTransition() {
+        Instant originalEpisode = NOW.minusSeconds(3600);
+        BudgetNotificationPreference existing = BudgetNotificationPreference.create(budget, false, true, originalEpisode);
+        existing.replace(false, true, Set.of(), originalEpisode);
+        ReflectionTestUtils.setField(existing, "version", 4L);
+        when(preferenceRepository.findOneForOwnedMutation(12L, "owner")).thenReturn(Optional.of(existing));
+        when(preferenceRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BudgetNotificationPreferenceView unchanged = service.update(
+            12L,
+            new BudgetNotificationPreferenceUpdateCommand(4L, true, Set.of(new BigDecimal("50.0000")), true)
+        );
+        assertThat(unchanged.periodCloseEnabledSince()).isEqualTo(originalEpisode);
+
+        BudgetNotificationPreferenceView disabled = service.update(
+            12L,
+            new BudgetNotificationPreferenceUpdateCommand(4L, true, Set.of(new BigDecimal("80.0000")), false)
+        );
+        assertThat(disabled.periodCloseEnabledSince()).isNull();
+        assertThat(existing.permitsPeriodCloseCapture(NOW.minusSeconds(1))).isFalse();
+
+        BudgetNotificationPreferenceView reenabled = service.update(
+            12L,
+            new BudgetNotificationPreferenceUpdateCommand(4L, true, Set.of(new BigDecimal("80.0000")), true)
+        );
+        assertThat(reenabled.periodCloseEnabledSince()).isEqualTo(NOW);
+        assertThat(existing.permitsPeriodCloseCapture(NOW.minusSeconds(1))).isFalse();
+        assertThat(existing.permitsPeriodCloseCapture(NOW)).isTrue();
+    }
+
+    @Test
+    void normalizesOptionalCreationPreferencesWithoutPersistingDefaults() {
+        assertThat(service.normalizeForCreation(null)).isNull();
+
+        BudgetNotificationPreferenceInput normalized = service.normalizeForCreation(
+            new BudgetNotificationPreferenceInput(true, Set.of(new BigDecimal("80.5"), new BigDecimal("50.0000")), true)
+        );
+        assertThat(normalized.percentageAlertsEnabled()).isTrue();
+        assertThat(normalized.periodCloseEnabled()).isTrue();
+        assertThat(normalized.thresholdPercentages()).containsExactlyInAnyOrder(new BigDecimal("50.0000"), new BigDecimal("80.5000"));
     }
 }

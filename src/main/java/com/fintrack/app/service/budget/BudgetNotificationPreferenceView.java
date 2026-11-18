@@ -12,5 +12,6 @@ public record BudgetNotificationPreferenceView(
     boolean percentageAlertsEnabled,
     List<BigDecimal> thresholdPercentages,
     boolean periodCloseEnabled,
+    Instant periodCloseEnabledSince,
     Instant updatedAt
 ) {}

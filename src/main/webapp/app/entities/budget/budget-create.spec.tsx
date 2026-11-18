@@ -36,6 +36,8 @@ const renderCreate = () =>
     </MemoryRouter>,
   );
 
+const byCy = (value: string) => document.querySelector<HTMLElement>(`[data-cy="${value}"]`);
+
 const fillRequiredFields = async () => {
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Monthly essentials' } });
   fireEvent.change(screen.getByLabelText('Period limit'), { target: { value: '1250' } });
@@ -83,6 +85,11 @@ describe('BudgetCreate', () => {
           categoryScopeMode: 'ALL',
           tagScopeMode: 'NONE',
         }),
+        notificationPreferences: {
+          percentageAlertsEnabled: false,
+          thresholdPercentages: [],
+          periodCloseEnabled: false,
+        },
       }),
     );
     expect(await screen.findByText('Created budget')).toBeTruthy();
@@ -207,6 +214,29 @@ describe('BudgetCreate', () => {
 
     expect(await screen.findByText('Select at least one account.')).toBeTruthy();
     expect(mockCreateBudget).not.toHaveBeenCalled();
+  });
+
+  it('does not activate notification suggestions by default and includes explicitly enabled preferences in creation', async () => {
+    mockCreateBudget.mockResolvedValue({ id: 47, name: 'Monthly essentials', type: 'EXPENSE', currency: 'MXN' });
+    renderCreate();
+    await fillRequiredFields();
+
+    expect(screen.getByRole('heading', { name: 'Spending alerts' })).toBeTruthy();
+    expect((byCy('budgetCreateNotificationThresholdEnabled') as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(byCy('budgetCreateNotificationThresholdEnabled'));
+    fireEvent.click(byCy('budgetCreateNotificationSuggestion50'));
+    fireEvent.click(byCy('budgetCreateNotificationSuggestion80'));
+    fireEvent.change(byCy('budgetCreateNotificationCustomThreshold'), { target: { value: '100.125' } });
+    fireEvent.click(byCy('budgetCreateNotificationAddThreshold'));
+    fireEvent.click(byCy('budgetCreateNotificationPeriodCloseEnabled'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create budget' }));
+
+    await waitFor(() => expect(mockCreateBudget).toHaveBeenCalledTimes(1));
+    expect(mockCreateBudget.mock.calls[0][0].notificationPreferences).toEqual({
+      percentageAlertsEnabled: true,
+      thresholdPercentages: [50, 80, 100.125],
+      periodCloseEnabled: true,
+    });
   });
 
   it('requires a currency before exposing accounts and removes incompatible selections after a currency change', async () => {

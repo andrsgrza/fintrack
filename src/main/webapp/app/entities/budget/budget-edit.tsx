@@ -31,7 +31,7 @@ import {
   updateBudgetMetadata,
 } from './budget-api';
 import { BudgetScopeSection, ScopeMode, TagScopeMode, categoryCompatible } from './budget-create';
-import { browserTimeZone, browserToday, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
+import { browserTimeZone, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
 
 type EffectiveChoice = 'CURRENT' | 'NEXT' | 'FUTURE';
 
@@ -119,7 +119,19 @@ const BudgetEdit = () => {
     setLoading(true);
     setError(null);
     try {
-      const overview = await getBudgetOverview({ referenceDate: browserToday(), timeZone });
+      let nextHistory: BudgetHistory | null = null;
+      let nextEvaluation: BudgetEvaluation | null = null;
+      try {
+        nextEvaluation = await getBudgetCurrentEvaluation(budgetId);
+      } catch {
+        // A future or completed calendar can have no current period. Its first durable scheduled boundary is the
+        // server-owned fallback for loading immutable editing context.
+      }
+      nextHistory = await getBudgetHistory(budgetId);
+      const initialSchedule = nextHistory.schedules.find(schedule => schedule.active);
+      const overviewReferenceDate = nextEvaluation?.startInclusive ?? initialSchedule?.effectivePeriodStart;
+      if (!overviewReferenceDate) throw new Error('No Budget period is available.');
+      const overview = await getBudgetOverview({ referenceDate: overviewReferenceDate });
       const nextItem = overview.budgets.find(candidate => candidate.budgetId === budgetId) ?? null;
       if (!nextItem) {
         setItem(null);
@@ -131,23 +143,18 @@ const BudgetEdit = () => {
       setItem(nextItem);
       setName(nextItem.name);
       setDescription(nextItem.description ?? '');
-      const nextHistory = await getBudgetHistory(budgetId);
-      let nextEvaluation: BudgetEvaluation;
-      try {
-        nextEvaluation = await getBudgetCurrentEvaluation(budgetId, timeZone);
-      } catch (problem) {
+      if (!nextEvaluation) {
         const firstRevision = nextHistory.revisions[0];
-        if (nextItem.operationalStatus !== 'SCHEDULED' || !firstRevision) throw problem;
+        if (nextItem.operationalStatus !== 'SCHEDULED' || !firstRevision) throw new Error('No current Budget period is available.');
         // A not-yet-started budget has no current period.  The API resolves its first scheduled period only to
         // display its immutable configuration; mutation stays unavailable until the server has a current period.
-        nextEvaluation = await getBudgetEvaluationAtDate(budgetId, firstRevision.anchorDate, timeZone);
+        nextEvaluation = await getBudgetEvaluationAtDate(budgetId, firstRevision.anchorDate);
       }
       const [nextRevision, nextPeriods] = await Promise.all([
         getBudgetEffectiveRevision(budgetId, nextEvaluation.startInclusive),
         getBudgetOperationalPeriods(budgetId, {
           firstIndex: nextEvaluation.periodIndex,
           lastIndex: nextEvaluation.periodIndex + 60,
-          timeZone,
         }),
       ]);
       setHistory(nextHistory);

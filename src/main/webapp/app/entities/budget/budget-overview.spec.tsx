@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import BudgetOverview from './budget-overview';
 import { getBudgetOverview } from './budget-api';
-import { browserToday } from './budget-utils';
 
 jest.mock('app/config/store', () => ({ useAppSelector: () => 'en' }));
 jest.mock('./budget-api', () => ({ getBudgetOverview: jest.fn() }));
@@ -81,14 +80,16 @@ describe('BudgetOverview', () => {
     );
   });
 
-  it('explains the common reference date and restores it to today without changing a budget', async () => {
+  it('returns to server-authoritative current periods without using the browser date', async () => {
     renderOverview();
     await screen.findByText('Food limit');
-    expect(screen.getByText(/only chooses which period/i)).toBeTruthy();
+    expect(screen.getByText(/each Budget shows its current period/i)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('View periods corresponding to this day'), { target: { value: '2026-01-01' } });
     fireEvent.click(screen.getByRole('button', { name: 'Today' }));
 
-    await waitFor(() => expect(mockGetBudgetOverview).toHaveBeenLastCalledWith(expect.objectContaining({ referenceDate: browserToday() })));
+    await waitFor(() => {
+      expect(mockGetBudgetOverview).toHaveBeenLastCalledWith(expect.not.objectContaining({ referenceDate: expect.any(String) }));
+    });
   });
 
   it('keeps financial zero, unavailable, exceeded, scheduled and paused periods distinct in the overview', async () => {

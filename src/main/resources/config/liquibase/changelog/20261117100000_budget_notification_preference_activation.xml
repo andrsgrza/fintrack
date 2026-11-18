@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+      This is an activation epoch, not an event history. Existing enabled development preferences have no truthful
+      historical activation instant, so the migration baseline is its execution time. That deliberately prevents a
+      future recovery worker from retroactively emitting closings that predate this capability while allowing future
+      boundaries to be considered normally.
+    -->
+    <changeSet id="20261117100000-1-period-close-activation-epoch" author="fintrack">
+        <addColumn tableName="budget_notification_preference">
+            <column name="period_close_enabled_since" type="${datetimeType}"/>
+        </addColumn>
+        <update tableName="budget_notification_preference">
+            <column name="period_close_enabled_since" valueComputed="CURRENT_TIMESTAMP"/>
+            <where>period_close_enabled = true</where>
+        </update>
+    </changeSet>
+</databaseChangeLog>

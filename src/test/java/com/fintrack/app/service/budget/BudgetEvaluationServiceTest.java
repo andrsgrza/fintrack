@@ -59,6 +59,9 @@ class BudgetEvaluationServiceTest {
     @Mock
     private SemanticAnalyticsExecutionService executionService;
 
+    @Mock
+    private BudgetTimeZoneService budgetTimeZoneService;
+
     private BudgetEvaluationService service;
     private Budget budget;
     private BudgetRevision revision;
@@ -73,6 +76,7 @@ class BudgetEvaluationServiceTest {
             currentUserService,
             compiler,
             executionService,
+            budgetTimeZoneService,
             CLOCK
         );
         budget = budget(BudgetType.EXPENSE, "100.00");
@@ -83,6 +87,8 @@ class BudgetEvaluationServiceTest {
         when(budgetRepository.findOneForEvaluationByIdAndUserLogin(9L, OWNER)).thenReturn(Optional.of(budget));
         when(scheduleRepository.findAllByBudgetIdOrderBySequenceNumber(9L)).thenReturn(List.of(schedule));
         when(lifecycleEventRepository.findAllByBudgetIdOrderBySequenceNumber(9L)).thenReturn(List.of());
+        lenient().when(budgetTimeZoneService.resolveCurrentZoneForEvaluation(any(Budget.class))).thenReturn(java.time.ZoneId.of(ZONE));
+        lenient().when(budgetTimeZoneService.resolveZoneForEvaluation(any(Budget.class), any())).thenReturn(java.time.ZoneId.of(ZONE));
         lenient()
             .when(compiler.compile(eq(budget), eq(revision), any(BudgetPeriod.class), any()))
             .thenAnswer(invocation -> compilation(invocation.getArgument(2)));
@@ -196,14 +202,14 @@ class BudgetEvaluationServiceTest {
     }
 
     @Test
-    void uses_the_requested_iana_zone_to_resolve_today_and_caps_the_current_period_through_that_date() {
+    void ignores_the_client_zone_and_uses_the_persisted_budget_assignment_for_today_and_financial_cutoff() {
         when(executionService.executeForTrustedOwner(any(), any())).thenReturn(result("10.00", SemanticResultAvailability.COMPLETE));
 
-        service.current(9L, ZONE);
+        service.current(9L, "Asia/Tokyo");
 
         ArgumentCaptor<BudgetPeriod> period = ArgumentCaptor.forClass(BudgetPeriod.class);
         verify(compiler).compile(eq(budget), eq(revision), period.capture(), eq(java.time.ZoneId.of(ZONE)));
-        // The fixed instant is Feb 28 in Mexico City. March must remain a future period.
+        // The fixed instant is Feb 28 in the persisted Mexico City assignment. The client-provided Tokyo zone has no authority.
         assertThat(period.getValue().startInclusive()).isEqualTo(LocalDate.of(2026, 2, 1));
     }
 

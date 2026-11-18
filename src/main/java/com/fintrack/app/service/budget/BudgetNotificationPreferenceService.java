@@ -1,15 +1,22 @@
 package com.fintrack.app.service.budget;
 
 import com.fintrack.app.domain.Budget;
+import com.fintrack.app.domain.BudgetLifecycleEvent;
 import com.fintrack.app.domain.BudgetNotificationPreference;
+import com.fintrack.app.domain.BudgetRevisionSchedule;
+import com.fintrack.app.domain.enumeration.BudgetPeriodOperationalStatus;
+import com.fintrack.app.repository.BudgetLifecycleEventRepository;
 import com.fintrack.app.repository.BudgetNotificationPreferenceRepository;
 import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
 import com.fintrack.app.repository.UserRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -27,21 +34,30 @@ public class BudgetNotificationPreferenceService {
 
     private final BudgetRepository budgetRepository;
     private final BudgetNotificationPreferenceRepository preferenceRepository;
+    private final BudgetRevisionScheduleRepository scheduleRepository;
+    private final BudgetLifecycleEventRepository lifecycleEventRepository;
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
+    private final BudgetTimeZoneService budgetTimeZoneService;
     private final Clock clock;
 
     public BudgetNotificationPreferenceService(
         BudgetRepository budgetRepository,
         BudgetNotificationPreferenceRepository preferenceRepository,
+        BudgetRevisionScheduleRepository scheduleRepository,
+        BudgetLifecycleEventRepository lifecycleEventRepository,
         UserRepository userRepository,
         CurrentUserService currentUserService,
+        BudgetTimeZoneService budgetTimeZoneService,
         Clock clock
     ) {
         this.budgetRepository = budgetRepository;
         this.preferenceRepository = preferenceRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.lifecycleEventRepository = lifecycleEventRepository;
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
+        this.budgetTimeZoneService = budgetTimeZoneService;
         this.clock = clock;
     }
 
@@ -61,6 +77,7 @@ public class BudgetNotificationPreferenceService {
         // occurrence unambiguous and prevents configuration updates from racing a crossing comparison.
         userRepository.findOneForBudgetNotificationMutationByLogin(login).orElseThrow(this::notFound);
         Budget budget = budgetRepository.findOneByIdAndUserLogin(budgetId, login).orElseThrow(this::notFound);
+        requireEditable(budget);
         Set<BigDecimal> thresholds = normalize(command.thresholdPercentages());
         if (command.percentageAlertsEnabled() && thresholds.isEmpty()) {
             throw invalid("At least one threshold is required when percentage alerts are enabled.");
@@ -82,6 +99,39 @@ public class BudgetNotificationPreferenceService {
         return view(preferenceRepository.saveAndFlush(preference));
     }
 
+    /**
+     * Normalizes the optional creation payload before it participates in the creation fingerprint. Nothing is
+     * persisted for an omitted payload, so the familiar disabled defaults remain a genuinely absent configuration.
+     */
+    public BudgetNotificationPreferenceInput normalizeForCreation(BudgetNotificationPreferenceInput supplied) {
+        if (supplied == null) return null;
+        boolean percentageAlertsEnabled = Boolean.TRUE.equals(supplied.percentageAlertsEnabled());
+        boolean periodCloseEnabled = Boolean.TRUE.equals(supplied.periodCloseEnabled());
+        Set<BigDecimal> thresholds = normalize(supplied.thresholdPercentages());
+        if (percentageAlertsEnabled && thresholds.isEmpty()) {
+            throw invalid("At least one threshold is required when percentage alerts are enabled.");
+        }
+        return new BudgetNotificationPreferenceInput(percentageAlertsEnabled, Set.copyOf(thresholds), periodCloseEnabled);
+    }
+
+    /** Called only inside the Budget creation transaction, after the aggregate has an identifier. */
+    public void createForBudget(Budget budget, BudgetNotificationPreferenceInput input, Instant now) {
+        if (input == null) return;
+        BudgetNotificationPreference preference = BudgetNotificationPreference.create(
+            budget,
+            Boolean.TRUE.equals(input.percentageAlertsEnabled()),
+            Boolean.TRUE.equals(input.periodCloseEnabled()),
+            now
+        );
+        preference.replace(
+            Boolean.TRUE.equals(input.percentageAlertsEnabled()),
+            Boolean.TRUE.equals(input.periodCloseEnabled()),
+            normalize(input.thresholdPercentages()),
+            now
+        );
+        preferenceRepository.saveAndFlush(preference);
+    }
+
     private Set<BigDecimal> normalize(Set<BigDecimal> supplied) {
         Set<BigDecimal> values = new LinkedHashSet<>();
         if (supplied == null) return values;
@@ -101,7 +151,7 @@ public class BudgetNotificationPreferenceService {
     }
 
     private BudgetNotificationPreferenceView absent(Long budgetId) {
-        return new BudgetNotificationPreferenceView(budgetId, false, null, false, List.of(), false, null);
+        return new BudgetNotificationPreferenceView(budgetId, false, null, false, List.of(), false, null, null);
     }
 
     private BudgetNotificationPreferenceView view(BudgetNotificationPreference preference) {
@@ -112,8 +162,31 @@ public class BudgetNotificationPreferenceService {
             preference.isPercentageAlertsEnabled(),
             preference.getThresholds().stream().map(threshold -> threshold.getNormalizedPercentage()).sorted().toList(),
             preference.isPeriodCloseEnabled(),
+            preference.getPeriodCloseEnabledSince(),
             preference.getUpdatedAt()
         );
+    }
+
+    /**
+     * A scheduled future FINISH remains editable until it takes effect. Once the timeline says the current local
+     * period is completed (including ONCE/finite recurrence completion), delivery preferences are terminal too.
+     */
+    private void requireEditable(Budget budget) {
+        ZoneId zone = budgetTimeZoneService.resolveCurrentZone(budget).orElse(null);
+        if (zone == null) return;
+        List<BudgetRevisionSchedule> schedules = scheduleRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
+        if (schedules.isEmpty()) return;
+        List<BudgetLifecycleEvent> events = lifecycleEventRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
+        BudgetTimeline timeline = new BudgetTimeline(schedules, events);
+        LocalDate today = LocalDate.now(clock.withZone(zone));
+        timeline
+            .periodContaining(today)
+            .ifPresent(period -> {
+                BudgetPeriodOperationalStatus status = timeline.periods(period.index(), period.index(), today).get(0).status();
+                if (status == BudgetPeriodOperationalStatus.COMPLETED) {
+                    throw invalid("Notification settings cannot be changed after this Budget has finished.");
+                }
+            });
     }
 
     private BudgetCommandException notFound() {

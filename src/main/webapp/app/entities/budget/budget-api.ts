@@ -114,7 +114,7 @@ export type BudgetOverviewItem = {
   evaluation: BudgetEvaluation | null;
 };
 
-export type BudgetOverview = { referenceDate: string; timeZone: string; budgets: BudgetOverviewItem[] };
+export type BudgetOverview = { referenceDate: string | null; timeZone: string | null; budgets: BudgetOverviewItem[] };
 
 export type CalendarPreviewDraft = {
   timeZone: string;
@@ -146,6 +146,26 @@ export type BudgetCreatePayload = {
     tagIds: number[];
     tagMatchMode: BudgetTagMatchMode;
   };
+  notificationPreferences?: BudgetNotificationPreferencesPayload;
+};
+
+/** Mutable delivery settings; they never alter the saved financial revision or semantic calculation. */
+export type BudgetNotificationPreferencesPayload = {
+  percentageAlertsEnabled: boolean;
+  thresholdPercentages: number[];
+  periodCloseEnabled: boolean;
+  expectedVersion?: number | null;
+};
+
+export type BudgetNotificationPreferences = {
+  budgetId: number;
+  configured: boolean;
+  version: number | null;
+  percentageAlertsEnabled: boolean;
+  thresholdPercentages: number[];
+  periodCloseEnabled: boolean;
+  periodCloseEnabledSince: string | null;
+  updatedAt: string | null;
 };
 
 export type BudgetCreated = { id: number; name: string; type: BudgetType; currency: string };
@@ -173,8 +193,7 @@ export type BudgetMutationResult = {
 };
 
 export const getBudgetOverview = async (params: {
-  referenceDate: string;
-  timeZone: string;
+  referenceDate?: string;
   type?: BudgetType | '';
   status?: BudgetOperationalStatus | '';
 }): Promise<BudgetOverview> => {
@@ -195,9 +214,22 @@ export const createBudget = async (payload: BudgetCreatePayload): Promise<Budget
   return response.data;
 };
 
+export const getBudgetNotificationPreferences = async (budgetId: number): Promise<BudgetNotificationPreferences> => {
+  const response = await axios.get<BudgetNotificationPreferences>(`api/budgets/${budgetId}/notification-preferences`);
+  return response.data;
+};
+
+export const updateBudgetNotificationPreferences = async (
+  budgetId: number,
+  payload: BudgetNotificationPreferencesPayload,
+): Promise<BudgetNotificationPreferences> => {
+  const response = await axios.put<BudgetNotificationPreferences>(`api/budgets/${budgetId}/notification-preferences`, payload);
+  return response.data;
+};
+
 export const getBudgetEvaluationHistory = async (
   budgetId: number,
-  params: { firstPeriodIndex: number; size: number; timeZone: string },
+  params: { firstPeriodIndex: number; size: number },
 ): Promise<BudgetEvaluationHistory> => {
   const response = await axios.get<BudgetEvaluationHistory>(`api/budgets/${budgetId}/evaluations`, { params });
   return response.data;
@@ -213,22 +245,20 @@ export const getBudgetHistory = async (budgetId: number): Promise<BudgetHistory>
   return response.data;
 };
 
-export const getBudgetCurrentEvaluation = async (budgetId: number, timeZone: string): Promise<BudgetEvaluation> => {
-  const response = await axios.get<BudgetEvaluation>(`api/budgets/${budgetId}/evaluation/current`, { params: { timeZone } });
+export const getBudgetCurrentEvaluation = async (budgetId: number): Promise<BudgetEvaluation> => {
+  const response = await axios.get<BudgetEvaluation>(`api/budgets/${budgetId}/evaluation/current`);
   return response.data;
 };
 
 /** Resolves a known budget period without treating a future scheduled period as current. */
-export const getBudgetEvaluationAtDate = async (budgetId: number, referenceDate: string, timeZone: string): Promise<BudgetEvaluation> => {
-  const response = await axios.get<BudgetEvaluation>(`api/budgets/${budgetId}/evaluation/at`, {
-    params: { referenceDate, timeZone },
-  });
+export const getBudgetEvaluationAtDate = async (budgetId: number, referenceDate: string): Promise<BudgetEvaluation> => {
+  const response = await axios.get<BudgetEvaluation>(`api/budgets/${budgetId}/evaluation/at`, { params: { referenceDate } });
   return response.data;
 };
 
 export const getBudgetOperationalPeriods = async (
   budgetId: number,
-  params: { firstIndex: number; lastIndex: number; timeZone: string },
+  params: { firstIndex: number; lastIndex: number },
 ): Promise<BudgetOperationalPeriod[]> => {
   const response = await axios.get<BudgetOperationalPeriod[]>(`api/budgets/${budgetId}/periods`, { params });
   return response.data;

@@ -75,6 +75,9 @@ class BudgetCreationServiceTest {
     @Mock
     private BudgetTimeZoneService budgetTimeZoneService;
 
+    @Mock
+    private BudgetNotificationPreferenceService notificationPreferenceService;
+
     private BudgetCreationService service;
     private User owner;
 
@@ -92,11 +95,13 @@ class BudgetCreationServiceTest {
             userRepository,
             currentUserService,
             CLOCK,
-            budgetTimeZoneService
+            budgetTimeZoneService,
+            notificationPreferenceService
         );
         when(currentUserService.getCurrentUser()).thenReturn(owner);
         when(userRepository.findOneForBudgetCreationByLogin(OWNER_LOGIN)).thenReturn(Optional.of(owner));
         when(budgetRepository.findOneWithRevisionsByUserLoginAndCreationRequestId(any(), any())).thenReturn(Optional.empty());
+        lenient().when(notificationPreferenceService.normalizeForCreation(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(revisionScheduleRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -265,6 +270,61 @@ class BudgetCreationServiceTest {
             .extracting("code")
             .isEqualTo(BudgetCommandException.Code.IDEMPOTENCY_CONFLICT);
         verify(budgetRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void persistsExplicitNotificationPreferencesInTheSameCreationFlow() {
+        when(budgetRepository.saveAndFlush(any(Budget.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        BudgetNotificationPreferenceInput input = new BudgetNotificationPreferenceInput(
+            true,
+            Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000")),
+            true
+        );
+        when(notificationPreferenceService.normalizeForCreation(input)).thenReturn(input);
+        BudgetCreateCommand base = new BudgetCreateCommand(
+            "Preference budget",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            "preferences-at-create",
+            "America/Mexico_City",
+            new BudgetInitialRevisionCommand(
+                new BigDecimal("100.00"),
+                1,
+                BudgetIntervalUnit.MONTH,
+                BudgetAlignment.ANCHORED,
+                LocalDate.of(2026, 3, 16),
+                BudgetRecurrenceMode.RECURRING,
+                BudgetRecurrenceTermination.NONE,
+                null,
+                null,
+                BudgetAccountScopeMode.ALL,
+                Set.of(),
+                BudgetCategoryScopeMode.ALL,
+                Set.of(),
+                BudgetTagScopeMode.NONE,
+                Set.of(),
+                BudgetTagMatchMode.ANY
+            )
+        );
+        BudgetCreateCommand command = new BudgetCreateCommand(
+            base.name(),
+            base.description(),
+            base.type(),
+            base.currency(),
+            base.clientRequestId(),
+            base.timeZone(),
+            base.initialRevision(),
+            input
+        );
+
+        service.create(command);
+
+        verify(notificationPreferenceService).createForBudget(
+            any(Budget.class),
+            org.mockito.ArgumentMatchers.same(input),
+            org.mockito.ArgumentMatchers.eq(CLOCK.instant())
+        );
     }
 
     private static BudgetCreateCommand command(

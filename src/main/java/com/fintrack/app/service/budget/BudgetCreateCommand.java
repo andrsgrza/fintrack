@@ -15,5 +15,19 @@ public record BudgetCreateCommand(
     @NotNull CurrencyCode currency,
     @NotBlank @Size(max = 100) String clientRequestId,
     @NotBlank @Size(max = 100) String timeZone,
-    @NotNull @Valid BudgetInitialRevisionCommand initialRevision
-) {}
+    @NotNull @Valid BudgetInitialRevisionCommand initialRevision,
+    @Valid BudgetNotificationPreferenceInput notificationPreferences
+) {
+    /** Keeps callers of the established creation contract source-compatible while preferences remain optional. */
+    public BudgetCreateCommand(
+        String name,
+        String description,
+        BudgetType type,
+        CurrencyCode currency,
+        String clientRequestId,
+        String timeZone,
+        BudgetInitialRevisionCommand initialRevision
+    ) {
+        this(name, description, type, currency, clientRequestId, timeZone, initialRevision, null);
+    }
+}

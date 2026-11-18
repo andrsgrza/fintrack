@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, Input, Label } from 'reactstrap';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -6,7 +6,7 @@ import { useAppSelector } from 'app/config/store';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 import { BudgetEvaluation, BudgetOperationalStatus, BudgetOverviewItem, BudgetType, getBudgetOverview } from './budget-api';
-import { browserTimeZone, browserToday, copy, dateRange, formatBudgetAmount, userFacingError } from './budget-utils';
+import { copy, dateRange, formatBudgetAmount, userFacingError } from './budget-utils';
 
 const stateLabel = (locale: string, status: BudgetOperationalStatus) =>
   copy(
@@ -42,7 +42,7 @@ const goalLabel = (locale: string, evaluation: BudgetEvaluation) => {
   return label ? copy(locale, label[0], label[1]) : null;
 };
 
-const BudgetCard = ({ item, locale, referenceDate }: { item: BudgetOverviewItem; locale: string; referenceDate: string }) => {
+const BudgetCard = ({ item, locale, referenceDate }: { item: BudgetOverviewItem; locale: string; referenceDate: string | null }) => {
   const evaluation = item.evaluation;
   const actual = evaluation?.actualAmount;
   const progress = evaluation?.progressPercentage;
@@ -137,7 +137,13 @@ const BudgetCard = ({ item, locale, referenceDate }: { item: BudgetOverviewItem;
         )}
 
         <div className="mt-auto pt-1">
-          <Button tag={Link} color="secondary" outline size="sm" to={`/budgets/${item.budgetId}?referenceDate=${referenceDate}`}>
+          <Button
+            tag={Link}
+            color="secondary"
+            outline
+            size="sm"
+            to={referenceDate ? `/budgets/${item.budgetId}?referenceDate=${referenceDate}` : `/budgets/${item.budgetId}`}
+          >
             {copy(locale, 'Abrir presupuesto', 'Open budget')}
           </Button>
         </div>
@@ -150,20 +156,19 @@ const BudgetOverview = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [referenceDate, setReferenceDate] = useState(searchParams.get('referenceDate') ?? browserToday());
+  const [referenceDate, setReferenceDate] = useState<string | null>(searchParams.get('referenceDate'));
   const deletedNotice = searchParams.get('notice') === 'deleted';
   const [type, setType] = useState<BudgetType | ''>('');
   const [status, setStatus] = useState<BudgetOperationalStatus | ''>('');
   const [items, setItems] = useState<BudgetOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timeZone = useMemo(browserTimeZone, []);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
-    void getBudgetOverview({ referenceDate, timeZone, type, status })
+    void getBudgetOverview({ ...(referenceDate ? { referenceDate } : {}), type, status })
       .then(result => {
         if (active) setItems(result.budgets);
       })
@@ -177,7 +182,7 @@ const BudgetOverview = () => {
     return () => {
       active = false;
     };
-  }, [locale, referenceDate, status, timeZone, type]);
+  }, [locale, referenceDate, status, type]);
 
   return (
     <ProductPage wide className="budget-overview">
@@ -206,17 +211,11 @@ const BudgetOverview = () => {
               <Input
                 id="budget-reference-date"
                 type="date"
-                value={referenceDate}
-                onChange={event => setReferenceDate(event.target.value)}
+                value={referenceDate ?? ''}
+                onChange={event => setReferenceDate(event.target.value || null)}
                 data-cy="budgetReferenceDate"
               />
-              <Button
-                color="secondary"
-                outline
-                type="button"
-                onClick={() => setReferenceDate(browserToday())}
-                data-cy="budgetReferenceToday"
-              >
+              <Button color="secondary" outline type="button" onClick={() => setReferenceDate(null)} data-cy="budgetReferenceToday">
                 {copy(locale, 'Hoy', 'Today')}
               </Button>
             </div>
@@ -249,10 +248,14 @@ const BudgetOverview = () => {
         <p className="small text-muted mb-0 mt-3">
           {copy(
             locale,
-            'Cambiar esta fecha sólo elige qué período de cada presupuesto se muestra; no modifica presupuestos ni movimientos financieros.',
-            'Changing this date only chooses which period of each budget is shown; it does not modify budgets or financial transactions.',
+            'Sin una fecha elegida, cada presupuesto muestra su período actual con su propia zona horaria efectiva. Elegir una fecha sólo cambia la referencia de consulta; no modifica presupuestos ni movimientos.',
+            'Without a selected date, each Budget shows its current period using its own effective time zone. Choosing a date only changes the query reference; it does not modify budgets or transactions.',
           )}{' '}
-          {copy(locale, 'Zona horaria actual del navegador', 'Current browser time zone')}: {timeZone}
+          {copy(
+            locale,
+            'Los períodos financieros usan la zona horaria persistida de cada presupuesto; la zona del navegador no cambia sus resultados.',
+            'Financial periods use each Budget’s persisted time zone; this browser’s zone does not change their results.',
+          )}
         </p>
       </ProductSection>
 

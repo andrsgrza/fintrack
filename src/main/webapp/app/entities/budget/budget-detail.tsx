@@ -27,7 +27,8 @@ import {
   getBudgetOverview,
 } from './budget-api';
 import { BudgetLifecycleActions, BudgetLifecycleStatus } from './budget-lifecycle-actions';
-import { browserTimeZone, browserToday, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
+import { BudgetDetailNotificationPreferences } from './budget-detail-notification-preferences';
+import { browserTimeZone, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
 
 const HISTORY_PAGE_SIZE = 10;
 
@@ -226,14 +227,12 @@ const useBudgetLifecycle = ({
   locale,
   refreshKey,
   setError,
-  timeZone,
 }: {
   budgetId: number;
   item: BudgetOverviewItem | null;
   locale: string;
   refreshKey: number;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
-  timeZone: string;
 }) => {
   const [history, setHistory] = useState<BudgetHistory | null>(null);
   const [currentEvaluation, setCurrentEvaluation] = useState<BudgetEvaluation | null>(null);
@@ -256,14 +255,13 @@ const useBudgetLifecycle = ({
         if (!active) return;
         setHistory(nextHistory);
         try {
-          const current = await getBudgetCurrentEvaluation(budgetId, timeZone);
+          const current = await getBudgetCurrentEvaluation(budgetId);
           if (!active) return;
           setCurrentEvaluation(current);
           if (current.operationalStatus === 'COMPLETED') return;
           const following = await getBudgetOperationalPeriods(budgetId, {
             firstIndex: current.periodIndex + 1,
             lastIndex: current.periodIndex + 1,
-            timeZone,
           });
           if (active) setNextPeriod(following[0] ?? null);
         } catch {
@@ -282,7 +280,7 @@ const useBudgetLifecycle = ({
     return () => {
       active = false;
     };
-  }, [budgetId, item, locale, refreshKey, setError, timeZone]);
+  }, [budgetId, item, locale, refreshKey, setError]);
 
   return { currentEvaluation, history, nextPeriod };
 };
@@ -347,7 +345,7 @@ const BudgetDetail = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const budgetId = Number(rawBudgetId);
   const timeZone = useMemo(browserTimeZone, []);
-  const referenceDate = searchParams.get('referenceDate') ?? browserToday();
+  const referenceDate = searchParams.get('referenceDate');
   const [item, setItem] = useState<BudgetOverviewItem | null>(null);
   const [evaluation, setEvaluation] = useState<BudgetEvaluation | null>(null);
   const [previousEvaluation, setPreviousEvaluation] = useState<BudgetEvaluation | null>(null);
@@ -362,7 +360,7 @@ const BudgetDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [lifecycleNotice, setLifecycleNotice] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const lifecycle = useBudgetLifecycle({ budgetId, item, locale, refreshKey, setError, timeZone });
+  const lifecycle = useBudgetLifecycle({ budgetId, item, locale, refreshKey, setError });
 
   const chooseReferenceDate = (value: string) => {
     if (!value) return;
@@ -372,6 +370,38 @@ const BudgetDetail = () => {
   };
 
   useEffect(() => {
+    if (!Number.isSafeInteger(budgetId) || budgetId <= 0 || referenceDate) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    // The browser's local midnight must not choose the financial current period. The server resolves it from this
+    // Budget's effective assignment, then the URL records the selected historical period explicitly.
+    void getBudgetCurrentEvaluation(budgetId)
+      .then(current => {
+        if (active) chooseReferenceDate(current.startInclusive);
+      })
+      .catch(async () => {
+        try {
+          const budgetHistory = await getBudgetHistory(budgetId);
+          const firstScheduled = budgetHistory.schedules.find(schedule => schedule.active);
+          if (!firstScheduled) throw new Error('No Budget period is available.');
+          if (active) chooseReferenceDate(firstScheduled.effectivePeriodStart);
+        } catch (problem) {
+          if (active) {
+            setError(
+              userFacingError(problem, copy(locale, 'No se pudo resolver el período actual.', 'The current period could not be resolved.')),
+            );
+            setLoading(false);
+          }
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [budgetId, locale, referenceDate, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!referenceDate) return;
     if (!Number.isSafeInteger(budgetId) || budgetId <= 0) {
       setNotFound(true);
       setLoading(false);
@@ -381,7 +411,7 @@ const BudgetDetail = () => {
     setLoading(true);
     setError(null);
     setNotFound(false);
-    void getBudgetOverview({ referenceDate, timeZone })
+    void getBudgetOverview({ referenceDate })
       .then(overview => {
         if (!active) return;
         const next = overview.budgets.find(candidate => candidate.budgetId === budgetId) ?? null;
@@ -406,7 +436,7 @@ const BudgetDetail = () => {
     return () => {
       active = false;
     };
-  }, [budgetId, locale, referenceDate, refreshKey, timeZone]);
+  }, [budgetId, locale, referenceDate, refreshKey]);
 
   useEffect(() => {
     if (!item?.evaluation || !Number.isSafeInteger(budgetId) || budgetId <= 0) return;
@@ -415,7 +445,7 @@ const BudgetDetail = () => {
     setError(null);
     const index = item.evaluation.periodIndex;
     const firstPeriodIndex = Math.max(0, index - 1);
-    void getBudgetEvaluationHistory(budgetId, { firstPeriodIndex, size: 3, timeZone })
+    void getBudgetEvaluationHistory(budgetId, { firstPeriodIndex, size: 3 })
       .then(result => {
         if (!active) return;
         setEvaluation(result.evaluations.find(candidate => candidate.periodIndex === index) ?? item.evaluation);
@@ -432,7 +462,7 @@ const BudgetDetail = () => {
     return () => {
       active = false;
     };
-  }, [budgetId, item?.evaluation, locale, timeZone]);
+  }, [budgetId, item?.evaluation, locale]);
 
   useEffect(() => {
     if (!evaluation || !Number.isSafeInteger(budgetId) || budgetId <= 0) return;
@@ -502,7 +532,7 @@ const BudgetDetail = () => {
   useEffect(() => {
     if (!item || !Number.isSafeInteger(budgetId) || budgetId <= 0) return;
     let active = true;
-    void getBudgetEvaluationHistory(budgetId, { firstPeriodIndex: historyFirst, size: HISTORY_PAGE_SIZE + 1, timeZone })
+    void getBudgetEvaluationHistory(budgetId, { firstPeriodIndex: historyFirst, size: HISTORY_PAGE_SIZE + 1 })
       .then(next => {
         if (active) setHistory(next);
       })
@@ -518,7 +548,7 @@ const BudgetDetail = () => {
     return () => {
       active = false;
     };
-  }, [budgetId, historyFirst, item, locale, timeZone]);
+  }, [budgetId, historyFirst, item, locale]);
 
   const historyRows = (history?.evaluations ?? [])
     .filter(candidate => candidate.operationalStatus !== 'COMPLETED')
@@ -532,10 +562,10 @@ const BudgetDetail = () => {
   const lifecycleItem = lifecycle.currentEvaluation ? { ...item, operationalStatus: lifecycle.currentEvaluation.operationalStatus } : item;
   const refreshLifecycle = () => setRefreshKey(current => current + 1);
   const returnToOverviewAfterDeletion = () => {
-    const next = new URLSearchParams({ referenceDate, notice: 'deleted' });
+    const next = new URLSearchParams({ notice: 'deleted' });
+    if (referenceDate) next.set('referenceDate', referenceDate);
     navigate(`/budgets?${next.toString()}`);
   };
-
   return (
     <ProductPage wide className="budget-detail">
       <ProductPageHeader
@@ -560,7 +590,7 @@ const BudgetDetail = () => {
             onChanged={refreshLifecycle}
             onSuccess={setLifecycleNotice}
             onDeleted={returnToOverviewAfterDeletion}
-            referenceDate={referenceDate}
+            referenceDate={referenceDate ?? ''}
             timeZone={timeZone}
           />
         }
@@ -612,7 +642,7 @@ const BudgetDetail = () => {
                 <Input
                   id="budget-detail-reference-date"
                   type="date"
-                  value={referenceDate}
+                  value={referenceDate ?? ''}
                   onChange={event => chooseReferenceDate(event.target.value)}
                   data-cy="budgetDetailReferenceDate"
                 />
@@ -640,7 +670,11 @@ const BudgetDetail = () => {
               ) : null}
             </div>
             <p className="small text-muted mb-0 mt-3">
-              {copy(locale, 'Zona horaria actual del navegador', 'Current browser time zone')}: {timeZone}
+              {copy(
+                locale,
+                'La zona horaria efectiva se conserva por período; cambiar la zona del navegador no reinterpreta este historial.',
+                'The effective time zone is preserved by period; changing this browser’s zone does not reinterpret this history.',
+              )}
             </p>
           </ProductSection>
 
@@ -709,6 +743,14 @@ const BudgetDetail = () => {
               </ProductSection>
             </>
           )}
+
+          <BudgetDetailNotificationPreferences
+            budgetId={budgetId}
+            type={item.type}
+            completed={lifecycleItem?.operationalStatus === 'COMPLETED'}
+            locale={locale}
+            refreshKey={refreshKey}
+          />
 
           <ProductSection title={copy(locale, 'Historial de períodos', 'Period history')}>
             <p className="small text-muted">

@@ -295,6 +295,24 @@ describe('BudgetEdit', () => {
         },
       ],
     });
+    mockHistory.mockResolvedValue({
+      budgetId: 10,
+      version: 4,
+      revisions: [revision, scheduledRevision],
+      schedules: [
+        {
+          id: 72,
+          operation: 'SCHEDULED',
+          revisionId: 21,
+          targetScheduleId: null,
+          effectivePeriodStart: '2027-01-01',
+          sequenceNumber: 1,
+          recordedAt: '2026-05-05T00:00:00Z',
+          active: true,
+        },
+      ],
+      lifecycleEvents: [],
+    });
     mockCurrent.mockRejectedValue({ response: { status: 400 } });
     mockAtDate.mockResolvedValue(scheduledEvaluation);
     mockPeriods.mockResolvedValue([
@@ -311,6 +329,6 @@ describe('BudgetEdit', () => {
     expect(byCy('budgetScheduledRevisionState')).toBeTruthy();
     expect(screen.queryByText('New revision')).toBeNull();
     expect(byCy('budgetEditName')).toBeTruthy();
-    expect(mockAtDate).toHaveBeenCalledWith(10, '2026-01-01', expect.any(String));
+    expect(mockAtDate).toHaveBeenCalledWith(10, '2026-01-01');
   });
 });

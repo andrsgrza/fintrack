@@ -11,7 +11,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -49,6 +48,7 @@ public class BudgetCommandService {
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
+    private final BudgetTimeZoneService budgetTimeZoneService;
     private final Clock clock;
 
     public BudgetCommandService(
@@ -67,6 +67,7 @@ public class BudgetCommandService {
         TagRepository tagRepository,
         UserRepository userRepository,
         CurrentUserService currentUserService,
+        BudgetTimeZoneService budgetTimeZoneService,
         Clock clock
     ) {
         this.budgetRepository = budgetRepository;
@@ -84,6 +85,7 @@ public class BudgetCommandService {
         this.tagRepository = tagRepository;
         this.userRepository = userRepository;
         this.currentUserService = currentUserService;
+        this.budgetTimeZoneService = budgetTimeZoneService;
         this.clock = clock;
     }
 
@@ -109,7 +111,7 @@ public class BudgetCommandService {
         if (replay.isPresent()) return replayResult(replay.orElseThrow());
         requireVersion(budget, command.expectedVersion());
 
-        LocalDate today = localToday(command.timeZone());
+        LocalDate today = localToday(budget);
         TimelineData timelineData = timelineData(budget);
         BudgetTimeline timeline = timelineData.timeline();
         BudgetPeriod current = timeline.currentPeriod(today);
@@ -167,7 +169,7 @@ public class BudgetCommandService {
         if (replay.isPresent()) return replayResult(replay.orElseThrow());
         requireVersion(budget, command.expectedVersion());
         TimelineData data = timelineData(budget);
-        BudgetPeriod current = data.timeline().currentPeriod(localToday(command.timeZone()));
+        BudgetPeriod current = data.timeline().currentPeriod(localToday(budget));
         BudgetRevisionSchedule target = activeFutureSchedule(data.timeline(), scheduleId, current);
         Instant now = Instant.now(clock);
         BudgetRevisionSchedule cancellation = scheduleRepository.saveAndFlush(
@@ -248,7 +250,7 @@ public class BudgetCommandService {
         if (replay.isPresent()) return replayResult(replay.orElseThrow());
         requireVersion(budget, command.expectedVersion());
 
-        LocalDate today = localToday(command.timeZone());
+        LocalDate today = localToday(budget);
         TimelineData data = timelineData(budget);
         BudgetTimeline timeline = data.timeline();
         BudgetPeriod current = timeline.currentPeriod(today);
@@ -329,7 +331,7 @@ public class BudgetCommandService {
     @Transactional(readOnly = true)
     public List<BudgetOperationalPeriodView> periods(Long budgetId, long firstIndex, long lastIndex, String timeZone) {
         Budget budget = ownedBudgetForRead(budgetId);
-        LocalDate today = localToday(timeZone);
+        LocalDate today = localToday(budget);
         return timelineData(budget)
             .timeline()
             .periods(firstIndex, lastIndex, today)
@@ -711,13 +713,9 @@ public class BudgetCommandService {
         );
     }
 
-    private LocalDate localToday(String timeZone) {
-        try {
-            require(timeZone != null && !timeZone.trim().isEmpty(), "timeZone is required.");
-            return LocalDate.now(clock.withZone(ZoneId.of(timeZone.trim())));
-        } catch (java.time.DateTimeException exception) {
-            throw invalid("timeZone must be a valid IANA zone identifier.");
-        }
+    /** Commands retain their client field for compatibility but never let a browser zone choose a Budget boundary. */
+    private LocalDate localToday(Budget budget) {
+        return LocalDate.now(clock.withZone(budgetTimeZoneService.resolveCurrentZoneForEvaluation(budget)));
     }
 
     private String clientRequestId(String value) {

@@ -78,8 +78,8 @@ public class BudgetResource {
 
     @GetMapping("/overview")
     public ResponseEntity<BudgetOverview> overview(
-        @RequestParam LocalDate referenceDate,
-        @RequestParam String timeZone,
+        @RequestParam(required = false) LocalDate referenceDate,
+        @RequestParam(required = false) String timeZone,
         @RequestParam(required = false) BudgetType type,
         @RequestParam(required = false) BudgetPeriodOperationalStatus status
     ) {
@@ -170,14 +170,17 @@ public class BudgetResource {
         @PathVariable Long budgetId,
         @RequestParam long firstIndex,
         @RequestParam long lastIndex,
-        @RequestParam String timeZone
+        @RequestParam(required = false) String timeZone
     ) {
         return ResponseEntity.ok(commandService.periods(budgetId, firstIndex, lastIndex, timeZone));
     }
 
     /** Current local-date evaluation for a future Budget overview; time zone never changes the authenticated owner. */
     @GetMapping("/{budgetId}/evaluation/current")
-    public ResponseEntity<BudgetEvaluationResult> currentEvaluation(@PathVariable Long budgetId, @RequestParam String timeZone) {
+    public ResponseEntity<BudgetEvaluationResult> currentEvaluation(
+        @PathVariable Long budgetId,
+        @RequestParam(required = false) String timeZone
+    ) {
         return ResponseEntity.ok(evaluationService.current(budgetId, timeZone));
     }
 
@@ -185,7 +188,7 @@ public class BudgetResource {
     public ResponseEntity<BudgetEvaluationResult> periodEvaluation(
         @PathVariable Long budgetId,
         @PathVariable long periodIndex,
-        @RequestParam String timeZone
+        @RequestParam(required = false) String timeZone
     ) {
         return ResponseEntity.ok(evaluationService.period(budgetId, periodIndex, timeZone));
     }
@@ -195,7 +198,7 @@ public class BudgetResource {
     public ResponseEntity<BudgetEvaluationResult> evaluationAtDate(
         @PathVariable Long budgetId,
         @RequestParam LocalDate referenceDate,
-        @RequestParam String timeZone
+        @RequestParam(required = false) String timeZone
     ) {
         return ResponseEntity.ok(evaluationService.atDate(budgetId, referenceDate, timeZone));
     }
@@ -205,7 +208,7 @@ public class BudgetResource {
         @PathVariable Long budgetId,
         @RequestParam long firstPeriodIndex,
         @RequestParam int size,
-        @RequestParam String timeZone
+        @RequestParam(required = false) String timeZone
     ) {
         return ResponseEntity.ok(evaluationService.history(budgetId, firstPeriodIndex, size, timeZone));
     }

@@ -42,6 +42,7 @@ public class BudgetCreationService {
     private final CurrentUserService currentUserService;
     private final Clock clock;
     private final BudgetTimeZoneService budgetTimeZoneService;
+    private final BudgetNotificationPreferenceService notificationPreferenceService;
 
     public BudgetCreationService(
         BudgetRepository budgetRepository,
@@ -52,7 +53,8 @@ public class BudgetCreationService {
         UserRepository userRepository,
         CurrentUserService currentUserService,
         Clock clock,
-        BudgetTimeZoneService budgetTimeZoneService
+        BudgetTimeZoneService budgetTimeZoneService,
+        BudgetNotificationPreferenceService notificationPreferenceService
     ) {
         this.budgetRepository = budgetRepository;
         this.revisionScheduleRepository = revisionScheduleRepository;
@@ -63,6 +65,7 @@ public class BudgetCreationService {
         this.currentUserService = currentUserService;
         this.clock = clock;
         this.budgetTimeZoneService = budgetTimeZoneService;
+        this.notificationPreferenceService = notificationPreferenceService;
     }
 
     public BudgetCreated create(BudgetCreateCommand command) {
@@ -72,7 +75,10 @@ public class BudgetCreationService {
             .findOneForBudgetCreationByLogin(authenticatedOwner.getLogin())
             .orElseThrow(() -> new IllegalStateException("Current user not found"));
         String requestId = requestId(command.clientRequestId());
-        String requestHash = digest(command);
+        BudgetNotificationPreferenceInput notificationPreferences = notificationPreferenceService.normalizeForCreation(
+            command.notificationPreferences()
+        );
+        String requestHash = digest(command, notificationPreferences);
         Optional<Budget> replay = budgetRepository.findOneWithRevisionsByUserLoginAndCreationRequestId(owner.getLogin(), requestId);
         if (replay.isPresent()) return replay(replay.orElseThrow(), requestHash);
 
@@ -80,6 +86,11 @@ public class BudgetCreationService {
         String description = description(command.description());
         if (command.type() == null || command.currency() == null) throw failure("Budget type and currency are required.");
         ZoneId requestedZone = resolveZone(command.timeZone());
+        // A Budget may be created before the person explicitly confirms a profile setting. In that case the
+        // creation form's validated zone is scoped to this Budget only; it must not silently persist a profile choice.
+        ZoneId effectiveZone = owner.getTimeZone() == null || owner.getTimeZone().isBlank()
+            ? requestedZone
+            : resolveZone(owner.getTimeZone());
         BudgetRevisionConfiguration configuration = configuration(command.initialRevision());
         // Calendar validation is centralized in this pure component before any database mutation occurs.
         new BudgetPeriodCalculator(configuration.calendarDefinition());
@@ -100,10 +111,10 @@ public class BudgetCreationService {
         revisionScheduleRepository.saveAndFlush(
             BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), configuration.anchorDate(), 1, "INITIAL", now)
         );
-        // Creation already carries a validated IANA zone. It seeds the profile only when it was previously unset;
-        // later profile updates are applied through immutable effective-period assignments.
-        if (owner.getTimeZone() == null || owner.getTimeZone().isBlank()) owner.setTimeZone(requestedZone.getId());
-        budgetTimeZoneService.recordInitial(saved, owner.getTimeZone(), configuration.anchorDate(), now);
+        budgetTimeZoneService.recordInitial(saved, effectiveZone.getId(), configuration.anchorDate(), now);
+        // This occurs in the same creation transaction as the Budget, its first revision, schedule and timezone
+        // assignment. A failed preference write therefore cannot leave an orphaned delivery configuration.
+        notificationPreferenceService.createForBudget(saved, notificationPreferences, now);
         return view(saved);
     }
 
@@ -265,7 +276,7 @@ public class BudgetCreationService {
             .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private String digest(BudgetCreateCommand command) {
+    private String digest(BudgetCreateCommand command, BudgetNotificationPreferenceInput notificationPreferences) {
         BudgetInitialRevisionCommand revision = command.initialRevision();
         String canonical = String.join(
             "|",
@@ -290,7 +301,12 @@ public class BudgetCreationService {
             idsForDigest(revision == null ? null : revision.categoryIds()),
             String.valueOf(revision == null ? null : revision.tagScopeMode()),
             idsForDigest(revision == null ? null : revision.tagIds()),
-            String.valueOf(revision == null ? null : revision.tagMatchMode())
+            String.valueOf(revision == null ? null : revision.tagMatchMode()),
+            notificationPreferences == null
+                ? "preferences:absent"
+                : "percentageAlerts=" + notificationPreferences.percentageAlertsEnabled(),
+            notificationPreferences == null ? "thresholds:" : thresholdValuesForDigest(notificationPreferences.thresholdPercentages()),
+            notificationPreferences == null ? "periodClose:" : "periodClose=" + notificationPreferences.periodCloseEnabled()
         );
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
@@ -304,6 +320,13 @@ public class BudgetCreationService {
         return (ids == null ? Set.<Long>of() : ids).stream()
             .sorted()
             .map(String::valueOf)
+            .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    private String thresholdValuesForDigest(Set<java.math.BigDecimal> values) {
+        return (values == null ? Set.<java.math.BigDecimal>of() : values).stream()
+            .sorted()
+            .map(value -> value.stripTrailingZeros().toPlainString())
             .collect(java.util.stream.Collectors.joining(","));
     }
 

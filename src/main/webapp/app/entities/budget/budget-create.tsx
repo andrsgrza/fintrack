@@ -15,6 +15,11 @@ import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/pr
 
 import { BudgetType, CalendarPreviewDraft, createBudget, previewBudgetCalendar } from './budget-api';
 import {
+  BudgetNotificationPreferencesEditor,
+  emptyNotificationPreferences,
+  validateNotificationPreferences,
+} from './budget-notification-preferences';
+import {
   browserTimeZone,
   browserToday,
   calendarValidationError,
@@ -347,6 +352,7 @@ const BudgetCreate = () => {
   const [tagScope, setTagScope] = useState<TagScopeMode>('NONE');
   const [tagIds, setTagIds] = useState<number[]>([]);
   const [tagMatchMode, setTagMatchMode] = useState<'ANY' | 'ALL'>('ANY');
+  const [notificationPreferences, setNotificationPreferences] = useState(emptyNotificationPreferences);
   const [accounts, setAccounts] = useState<IFinancialAccountSelectable[]>([]);
   const [categories, setCategories] = useState<ICategorySelectable[]>([]);
   const [tags, setTags] = useState<ITagSelectable[]>([]);
@@ -540,7 +546,7 @@ const BudgetCreate = () => {
     if (categoryScope === 'SELECTED' && !categoryIds.length)
       return copy(locale, 'Selecciona al menos una categoría.', 'Select at least one category.');
     if (tagScope === 'SELECTED' && !tagIds.length) return copy(locale, 'Selecciona al menos una etiqueta.', 'Select at least one tag.');
-    return null;
+    return validateNotificationPreferences(notificationPreferences, locale);
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -581,6 +587,9 @@ const BudgetCreate = () => {
           tagIds: tagScope === 'SELECTED' ? tagIds : [],
           tagMatchMode,
         },
+        // Keep this optional delivery configuration beside creation, but outside the immutable financial revision.
+        // Disabled controls and suggestions alone never create an alert event.
+        notificationPreferences,
       });
       navigate(`/budgets/${created.id}?referenceDate=${effectiveAnchorDate}`);
     } catch (problem) {
@@ -1117,7 +1126,18 @@ const BudgetCreate = () => {
             referenceError={referenceError}
           />
 
-          <ProductSection title={copy(locale, '4. Revisar y crear', '4. Review and create')}>
+          <ProductSection title={copy(locale, '4. Notificaciones opcionales', '4. Optional notifications')}>
+            <BudgetNotificationPreferencesEditor
+              locale={locale}
+              type={type}
+              value={notificationPreferences}
+              onChange={setNotificationPreferences}
+              disabled={submitting}
+              idPrefix="budgetCreateNotification"
+            />
+          </ProductSection>
+
+          <ProductSection title={copy(locale, '5. Revisar y crear', '5. Review and create')}>
             <div className="row g-3 mb-3">
               <div className="col-12 col-md-6">
                 <strong>{copy(locale, 'Objetivo', 'Objective')}:</strong>{' '}
@@ -1139,6 +1159,14 @@ const BudgetCreate = () => {
                   locale,
                   `Cuentas: ${accountScope === 'ALL' ? 'todas' : accountIds.length}; categorías: ${categoryScope === 'ALL' ? 'todas' : categoryIds.length}; etiquetas: ${tagScope === 'NONE' ? 'ninguna' : tagIds.length}.`,
                   `Accounts: ${accountScope === 'ALL' ? 'all' : accountIds.length}; categories: ${categoryScope === 'ALL' ? 'all' : categoryIds.length}; tags: ${tagScope === 'NONE' ? 'none' : tagIds.length}.`,
+                )}
+              </div>
+              <div className="col-12 col-md-6" data-cy="budgetNotificationReview">
+                <strong>{copy(locale, 'Notificaciones', 'Notifications')}:</strong>{' '}
+                {copy(
+                  locale,
+                  `${notificationPreferences.percentageAlertsEnabled ? `Alertas de ${type === 'EXPENSE' ? 'gasto' : 'ingresos'}: ${notificationPreferences.thresholdPercentages.map(value => `${value}%`).join(', ') || 'sin porcentajes'}` : 'Alertas de porcentaje desactivadas'}; resumen al cerrar: ${notificationPreferences.periodCloseEnabled ? 'activado' : 'desactivado'}.`,
+                  `${notificationPreferences.percentageAlertsEnabled ? `${type === 'EXPENSE' ? 'Spending' : 'Income'} alerts: ${notificationPreferences.thresholdPercentages.map(value => `${value}%`).join(', ') || 'no percentages'}` : 'Percentage alerts disabled'}; period-close summary: ${notificationPreferences.periodCloseEnabled ? 'enabled' : 'disabled'}.`,
                 )}
               </div>
             </div>

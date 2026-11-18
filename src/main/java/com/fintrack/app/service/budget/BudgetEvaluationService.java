@@ -19,7 +19,6 @@ import com.fintrack.app.service.analytics.SemanticUnit;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
-import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -43,6 +42,7 @@ public class BudgetEvaluationService {
     private final CurrentUserService currentUserService;
     private final BudgetSemanticQueryCompiler compiler;
     private final SemanticAnalyticsExecutionService executionService;
+    private final BudgetTimeZoneService budgetTimeZoneService;
     private final Clock clock;
 
     public BudgetEvaluationService(
@@ -52,6 +52,7 @@ public class BudgetEvaluationService {
         CurrentUserService currentUserService,
         BudgetSemanticQueryCompiler compiler,
         SemanticAnalyticsExecutionService executionService,
+        BudgetTimeZoneService budgetTimeZoneService,
         Clock clock
     ) {
         this.budgetRepository = budgetRepository;
@@ -60,11 +61,13 @@ public class BudgetEvaluationService {
         this.currentUserService = currentUserService;
         this.compiler = compiler;
         this.executionService = executionService;
+        this.budgetTimeZoneService = budgetTimeZoneService;
         this.clock = clock;
     }
 
-    public BudgetEvaluationResult current(Long budgetId, String timeZone) {
-        EvaluationContext context = context(budgetId, timeZone);
+    /** The retained request parameter is intentionally non-authoritative for REST compatibility. */
+    public BudgetEvaluationResult current(Long budgetId, String ignoredClientTimeZone) {
+        EvaluationContext context = context(budgetId);
         BudgetPeriod period;
         try {
             period = context.timeline().currentPeriod(context.today());
@@ -74,15 +77,15 @@ public class BudgetEvaluationService {
         return evaluate(context, operational(context, period.index()));
     }
 
-    public BudgetEvaluationResult period(Long budgetId, long periodIndex, String timeZone) {
+    public BudgetEvaluationResult period(Long budgetId, long periodIndex, String ignoredClientTimeZone) {
         if (periodIndex < 0) throw invalidPeriod("A Budget period index must be zero or greater.");
-        EvaluationContext context = context(budgetId, timeZone);
+        EvaluationContext context = context(budgetId);
         return evaluate(context, operational(context, periodIndex));
     }
 
-    public BudgetEvaluationResult atDate(Long budgetId, LocalDate referenceDate, String timeZone) {
+    public BudgetEvaluationResult atDate(Long budgetId, LocalDate referenceDate, String ignoredClientTimeZone) {
         if (referenceDate == null) throw invalidPeriod("A reference date is required.");
-        EvaluationContext context = context(budgetId, timeZone);
+        EvaluationContext context = context(budgetId);
         return atDate(context, referenceDate);
     }
 
@@ -95,17 +98,17 @@ public class BudgetEvaluationService {
         List<BudgetRevisionSchedule> schedules,
         List<BudgetLifecycleEvent> events,
         LocalDate referenceDate,
-        String timeZone
+        String ignoredClientTimeZone
     ) {
         if (budget == null || referenceDate == null) throw invalidPeriod("A Budget and reference date are required.");
-        ZoneId zone = resolveZone(timeZone);
         final BudgetTimeline timeline;
         try {
             timeline = new BudgetTimeline(schedules, events);
         } catch (IllegalArgumentException exception) {
             throw invalidPeriod("The Budget's immutable schedule is invalid.");
         }
-        return atDate(new EvaluationContext(budget, timeline, zone, LocalDate.now(clock.withZone(zone))), referenceDate);
+        ZoneId currentZone = budgetTimeZoneService.resolveCurrentZoneForEvaluation(budget);
+        return atDate(new EvaluationContext(budget, timeline, currentZone, LocalDate.now(clock.withZone(currentZone))), referenceDate);
     }
 
     /**
@@ -136,11 +139,11 @@ public class BudgetEvaluationService {
         return evaluate(context, operational(context, period.index()));
     }
 
-    public BudgetEvaluationHistory history(Long budgetId, long firstPeriodIndex, int size, String timeZone) {
+    public BudgetEvaluationHistory history(Long budgetId, long firstPeriodIndex, int size, String ignoredClientTimeZone) {
         if (firstPeriodIndex < 0 || size <= 0 || size > MAX_HISTORY_SIZE || firstPeriodIndex > Long.MAX_VALUE - size) {
             throw invalidRange("Budget evaluation history must request between 1 and " + MAX_HISTORY_SIZE + " periods from a valid index.");
         }
-        EvaluationContext context = context(budgetId, timeZone);
+        EvaluationContext context = context(budgetId);
         long last = firstPeriodIndex + size - 1L;
         List<BudgetTimeline.OperationalPeriod> periods;
         try {
@@ -154,7 +157,8 @@ public class BudgetEvaluationService {
     private BudgetEvaluationResult evaluate(EvaluationContext context, BudgetTimeline.OperationalPeriod operational) {
         Budget budget = context.budget();
         BudgetPeriod period = operational.period();
-        BudgetEvaluationPeriodTiming timing = timing(period, context.today());
+        ZoneId periodZone = budgetTimeZoneService.resolveZoneForEvaluation(budget, period.startInclusive());
+        BudgetEvaluationPeriodTiming timing = timing(period, LocalDate.now(clock.withZone(periodZone)));
         BudgetRevision revision = operational.revision();
         BigDecimal target = revision.getTargetAmount();
 
@@ -211,7 +215,7 @@ public class BudgetEvaluationService {
             );
         }
 
-        BudgetSemanticQueryCompilation compilation = compiler.compile(budget, revision, period, context.zone());
+        BudgetSemanticQueryCompilation compilation = compiler.compile(budget, revision, period, periodZone);
         if (compilation instanceof BudgetSemanticQueryCompilation.Failed failed) {
             return compilationFailure(budget, period, revision, operational.status(), timing, target, failed);
         }
@@ -462,27 +466,23 @@ public class BudgetEvaluationService {
         }
     }
 
-    private EvaluationContext context(Long budgetId, String requestedTimeZone) {
+    private EvaluationContext context(Long budgetId) {
         if (budgetId == null || budgetId <= 0) throw budgetNotFound();
-        ZoneId zone = resolveZone(requestedTimeZone);
         Budget budget = budgetRepository
             .findOneForEvaluationByIdAndUserLogin(budgetId, currentUserService.getCurrentUserLogin())
             .orElseThrow(this::budgetNotFound);
         List<BudgetRevisionSchedule> schedules = scheduleRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
         List<BudgetLifecycleEvent> events = lifecycleEventRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId());
         try {
-            return new EvaluationContext(budget, new BudgetTimeline(schedules, events), zone, LocalDate.now(clock.withZone(zone)));
+            ZoneId currentZone = budgetTimeZoneService.resolveCurrentZoneForEvaluation(budget);
+            return new EvaluationContext(
+                budget,
+                new BudgetTimeline(schedules, events),
+                currentZone,
+                LocalDate.now(clock.withZone(currentZone))
+            );
         } catch (IllegalArgumentException exception) {
             throw invalidPeriod("The Budget's immutable schedule is invalid.");
-        }
-    }
-
-    private ZoneId resolveZone(String requestedTimeZone) {
-        try {
-            if (requestedTimeZone == null || requestedTimeZone.isBlank()) throw invalidTimeZone();
-            return ZoneId.of(requestedTimeZone.trim());
-        } catch (DateTimeException exception) {
-            throw invalidTimeZone();
         }
     }
 
@@ -502,13 +502,6 @@ public class BudgetEvaluationService {
 
     private BudgetEvaluationException invalidRange(String message) {
         return new BudgetEvaluationException(BudgetEvaluationException.Code.INVALID_RANGE, message);
-    }
-
-    private BudgetEvaluationException invalidTimeZone() {
-        return new BudgetEvaluationException(
-            BudgetEvaluationException.Code.INVALID_TIME_ZONE,
-            "timeZone must be a valid IANA zone identifier."
-        );
     }
 
     private record EvaluationContext(Budget budget, BudgetTimeline timeline, ZoneId zone, LocalDate today) {}

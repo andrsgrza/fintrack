@@ -121,6 +121,15 @@ class BudgetOverviewServiceIT {
                 assertThat(item.operationalStatus()).isEqualTo(com.fintrack.app.domain.enumeration.BudgetPeriodOperationalStatus.COMPLETED);
             });
 
+        // Omitting a date asks the server to resolve every Budget's own current effective zone. Even an invalid
+        // browser parameter cannot override that server-side selection.
+        BudgetOverview automatic = overviewService.overview(null, "not/a-zone", null, null);
+        assertThat(automatic.referenceDate()).isNull();
+        assertThat(automatic.budgets())
+            .filteredOn(item -> item.budgetId().equals(active.getId()))
+            .singleElement()
+            .satisfies(item -> assertThat(item.evaluation().startInclusive()).isEqualTo(LocalDate.of(2026, 3, 1)));
+
         restBudgetMockMvc
             .perform(get("/api/budgets/overview").param("referenceDate", "2026-03-15").param("timeZone", ZONE))
             .andExpect(status().isOk())
@@ -133,6 +142,7 @@ class BudgetOverviewServiceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.budgets.length()").value(1))
             .andExpect(jsonPath("$.budgets[0].budgetId").value(active.getId()));
+        restBudgetMockMvc.perform(get("/api/budgets/overview").param("timeZone", "not/a-zone")).andExpect(status().isOk());
 
         // An authenticated different owner cannot discover the current user's card or its financial result.
         restBudgetMockMvc
