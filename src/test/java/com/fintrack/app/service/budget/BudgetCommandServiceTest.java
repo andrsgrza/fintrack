@@ -71,6 +71,9 @@ class BudgetCommandServiceTest {
     private TagRepository tagRepository;
 
     @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private CurrentUserService currentUserService;
 
     private final List<BudgetRevisionSchedule> schedules = new ArrayList<>();
@@ -116,10 +119,12 @@ class BudgetCommandServiceTest {
             financialAccountRepository,
             categoryRepository,
             tagRepository,
+            userRepository,
             currentUserService,
             CLOCK
         );
         when(currentUserService.getCurrentUserLogin()).thenReturn(OWNER);
+        lenient().when(userRepository.findOneForBudgetNotificationMutationByLogin(OWNER)).thenReturn(Optional.of(user));
         when(budgetRepository.findOneByIdAndUserLogin(7L, OWNER)).thenReturn(Optional.of(budget));
         lenient().when(revisionRepository.findAllByBudgetIdOrderByRevisionNumber(7L)).thenAnswer(invocation -> budget.getRevisions());
         lenient().when(scheduleRepository.findAllByBudgetIdOrderBySequenceNumber(7L)).thenAnswer(invocation -> List.copyOf(schedules));
@@ -406,6 +411,15 @@ class BudgetCommandServiceTest {
             .isEqualTo(BudgetCommandException.Code.VERSION_CONFLICT);
 
         verifyNoInteractions(receiptRepository, lifecycleEventRepository, scheduleRepository);
+    }
+
+    @Test
+    void readsHistoryWithOwnerIsolationButWithoutTheNotificationMutationLock() {
+        BudgetHistoryView history = service.history(7L);
+
+        assertThat(history.budgetId()).isEqualTo(7L);
+        verify(budgetRepository).findOneByIdAndUserLogin(7L, OWNER);
+        verifyNoInteractions(userRepository);
     }
 
     private static BudgetRevisionScheduleCommand revisionCommand(

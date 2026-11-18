@@ -1,11 +1,17 @@
 package com.fintrack.app.service.budget;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
 
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.*;
 import com.fintrack.app.domain.enumeration.*;
 import com.fintrack.app.repository.*;
+import com.fintrack.app.service.FinancialTransactionService;
+import com.fintrack.app.service.dto.CategoryDTO;
+import com.fintrack.app.service.dto.FinancialAccountDTO;
+import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.web.rest.TestUtil;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -13,14 +19,25 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** PostgreSQL proof that threshold evidence uses the real Budget semantic executor, not a second sum implementation. */
 @IntegrationTest
@@ -35,6 +52,12 @@ class BudgetNotificationEngineIT {
 
     @Autowired
     private BudgetRevisionScheduleRepository scheduleRepository;
+
+    @Autowired
+    private BudgetRevisionRepository revisionRepository;
+
+    @Autowired
+    private BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository;
 
     @Autowired
     private BudgetNotificationPreferenceRepository preferenceRepository;
@@ -58,6 +81,9 @@ class BudgetNotificationEngineIT {
     private BudgetNotificationOutboxWorker outboxWorker;
 
     @Autowired
+    private FinancialTransactionService financialTransactionService;
+
+    @Autowired
     private FinancialAccountRepository accountRepository;
 
     @Autowired
@@ -72,8 +98,50 @@ class BudgetNotificationEngineIT {
     @Autowired
     private EntityManager entityManager;
 
+    @Autowired
+    private TransactionTemplate transactionTemplate;
+
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    @MockitoSpyBean
+    private BudgetNotificationOutboxProcessor outboxProcessor;
+
+    private final Set<Long> fixtureBudgetIds = new LinkedHashSet<>();
+    private final Set<Long> fixtureAccountIds = new LinkedHashSet<>();
+    private final Set<Long> fixtureCategoryIds = new LinkedHashSet<>();
+
+    @AfterEach
+    void removeCommittedFixtures() {
+        transactionTemplate.executeWithoutResult(status -> {
+            for (Long budgetId : fixtureBudgetIds) {
+                notificationRepository.deleteByBudgetId(budgetId);
+                outboxRepository.deleteByBudgetId(budgetId);
+                claimRepository.deleteByBudgetId(budgetId);
+                preferenceRepository.deleteByBudgetId(budgetId);
+                timeZoneAssignmentRepository.deleteByBudgetId(budgetId);
+                scheduleRepository.deleteByBudgetId(budgetId);
+                revisionRepository.deleteAccountLinksByBudgetId(budgetId);
+                revisionRepository.deleteCategoryLinksByBudgetId(budgetId);
+                revisionRepository.deleteTagLinksByBudgetId(budgetId);
+                revisionRepository.deleteByBudgetId(budgetId);
+                budgetRepository
+                    .findById(budgetId)
+                    .ifPresent(budget -> budgetRepository.deleteAggregateById(budgetId, budget.getVersion()));
+            }
+            for (Long accountId : fixtureAccountIds) {
+                transactionRepository.deleteTagLinksByAccountId(accountId);
+                transactionRepository.deleteByAccountId(accountId);
+                accountRepository.deleteById(accountId);
+            }
+            fixtureCategoryIds.forEach(categoryRepository::deleteById);
+        });
+        fixtureBudgetIds.clear();
+        fixtureAccountIds.clear();
+        fixtureCategoryIds.clear();
+    }
+
     @Test
-    @Transactional
     void captures_intermediate_real_expense_crossings_once_and_materializes_one_notification_per_mutation() {
         User owner = TestUtil.findAll(entityManager, User.class)
             .stream()
@@ -91,7 +159,7 @@ class BudgetNotificationEngineIT {
         owner.setTimeZone("America/Mexico_City");
         FinancialAccount account = account(owner);
         Category category = category(owner);
-        Budget budget = budget(owner);
+        Budget budget = budget(owner, "notification-create", category);
         timeZoneService.recordInitial(budget, "America/Mexico_City", LocalDate.of(2026, 3, 1), NOW);
         BudgetNotificationPreference preference = BudgetNotificationPreference.create(budget, true, false, NOW);
         preference.replace(true, false, Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000"), new BigDecimal("100.0000")), NOW);
@@ -110,16 +178,256 @@ class BudgetNotificationEngineIT {
             transaction -> String.valueOf(transaction.getId())
         );
 
-        assertThat(claimRepository.findAll()).hasSize(3);
-        assertThat(outboxRepository.findAll()).hasSize(2);
+        assertThat(claimRepository.countByBudgetId(budget.getId())).isEqualTo(3);
+        var budgetEvents = outboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(budget.getId())).toList();
+        assertThat(budgetEvents).hasSize(2);
         assertThat(outboxWorker.processPending()).isEqualTo(2);
-        assertThat(notificationRepository.findAll()).hasSize(2);
-        assertThat(outboxRepository.findAll()).allSatisfy(event ->
-            assertThat(event.getState()).isEqualTo(BudgetNotificationOutboxState.MATERIALIZED)
+        assertThat(budgetEvents).allSatisfy(event -> {
+            assertThat(notificationRepository.findOneByOutboxEventId(event.getId())).isPresent();
+            assertThat(outboxRepository.findById(event.getId()).orElseThrow().getState()).isEqualTo(
+                BudgetNotificationOutboxState.MATERIALIZED
+            );
+        });
+    }
+
+    @Test
+    void persists_retry_evidence_and_allows_two_workers_to_materialize_only_once() throws Exception {
+        User owner = owner();
+        Budget budget = budget(owner, "notification-worker-retry");
+        BudgetNotificationOutbox event = outboxRepository.saveAndFlush(
+            BudgetNotificationOutbox.pending(owner, budget, "worker-retry", "{}", NOW)
+        );
+
+        doThrow(new IllegalStateException("simulated worker fault")).when(outboxProcessor).materialize(event.getId());
+        // Other tests may have durable pending rows for this same disposable database. The failed event itself is
+        // identified by its persisted retry state below; it must not materialize a notification on this pass.
+        assertThat(outboxWorker.processPending()).isGreaterThanOrEqualTo(0);
+        BudgetNotificationOutbox retriable = outboxRepository.findById(event.getId()).orElseThrow();
+        assertThat(retriable.getState()).isEqualTo(BudgetNotificationOutboxState.PENDING);
+        assertThat(retriable.getAttemptCount()).isEqualTo(1);
+        assertThat(notificationRepository.findOneByOutboxEventId(event.getId())).isEmpty();
+
+        // A restart sees the durable event. Make its already-persisted retry eligible without changing the snapshot
+        // or recreating the event; this isolates retry policy from wall-clock timing in a deterministic test.
+        ReflectionTestUtils.setField(retriable, "nextAttemptAt", NOW);
+        outboxRepository.saveAndFlush(retriable);
+        reset(outboxProcessor);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<Integer> first = executor.submit(() -> processAfter(start, ready));
+            Future<Integer> second = executor.submit(() -> processAfter(start, ready));
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(first.get(20, TimeUnit.SECONDS) + second.get(20, TimeUnit.SECONDS)).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(outboxRepository.findById(event.getId()).orElseThrow().getState()).isEqualTo(BudgetNotificationOutboxState.MATERIALIZED);
+        assertThat(notificationRepository.findOneByOutboxEventId(event.getId())).isPresent();
+        assertThat(outboxWorker.processPending()).isZero();
+        assertThat(notificationRepository.findOneByOutboxEventId(event.getId())).isPresent();
+    }
+
+    @Test
+    void serializes_two_concurrent_financial_mutations_for_one_owner_without_losing_a_crossing() throws Exception {
+        User owner = owner();
+        FinancialAccount account = account(owner);
+        Category category = category(owner);
+        Budget budget = budget(owner, "notification-concurrent-crossings", category);
+        timeZoneService.recordInitial(budget, "America/Mexico_City", LocalDate.of(2026, 3, 1), NOW);
+        BudgetNotificationPreference preference = BudgetNotificationPreference.create(budget, true, false, NOW);
+        preference.replace(true, false, Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000")), NOW);
+        preferenceRepository.saveAndFlush(preference);
+        transactionRepository.saveAndFlush(transaction(account, category, "40.00"));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<Void> first = executor.submit(() -> captureConcurrentExpense(start, ready, account.getId(), category.getId(), "20.00"));
+            Future<Void> second = executor.submit(() -> captureConcurrentExpense(start, ready, account.getId(), category.getId(), "20.00"));
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            first.get(20, TimeUnit.SECONDS);
+            second.get(20, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(claimRepository.countByBudgetId(budget.getId())).isEqualTo(2);
+        List<BudgetNotificationOutbox> events = outboxRepository
+            .findAll()
+            .stream()
+            .filter(event -> event.getBudget().getId().equals(budget.getId()))
+            .toList();
+        assertThat(events).hasSize(2);
+        assertThat(
+            events.stream().flatMap(event -> snapshot(event.getSnapshotJson()).newlyCrossedPercentages().stream()).toList()
+        ).containsExactlyInAnyOrder(new BigDecimal("50.0000"), new BigDecimal("80.0000"));
+        assertThat(events.stream().map(event -> snapshot(event.getSnapshotJson()).newProgressPercentage()).toList()).allSatisfy(progress ->
+            assertThat(progress).isIn(new BigDecimal("60.00"), new BigDecimal("80.00"))
         );
     }
 
+    @Test
+    @WithMockUser(username = OWNER)
+    void captures_manual_create_and_scope_updates_through_the_real_transaction_service() {
+        User owner = owner();
+        FinancialAccount account = account(owner);
+        Category category = category(owner);
+        transactionRepository.saveAndFlush(transaction(account, category, "40.00"));
+        Budget budget = budget(owner, "notification-manual-transaction-service", category);
+        timeZoneService.recordInitial(budget, "America/Mexico_City", LocalDate.of(2026, 3, 1), NOW);
+        BudgetNotificationPreference preference = BudgetNotificationPreference.create(budget, true, false, NOW);
+        preference.replace(true, false, Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000")), NOW);
+        preferenceRepository.saveAndFlush(preference);
+
+        FinancialTransactionDTO crossing = financialTransactionService.save(transactionDto(account, category, "20.00"));
+        assertThat(claimRepository.countByBudgetId(budget.getId())).isEqualTo(1);
+
+        FinancialTransactionDTO leaveScope = new FinancialTransactionDTO();
+        leaveScope.setId(crossing.getId());
+        financialTransactionService.partialUpdate(leaveScope, objectMapper.createObjectNode().putNull("category")).orElseThrow();
+        assertThat(claimRepository.countByBudgetId(budget.getId())).isEqualTo(1);
+
+        FinancialTransactionDTO outsideScope = financialTransactionService.save(transactionDto(account, null, "40.00"));
+        FinancialTransactionDTO enterScope = new FinancialTransactionDTO();
+        enterScope.setId(outsideScope.getId());
+        enterScope.setCategory(categoryDto(category));
+        financialTransactionService
+            .partialUpdate(
+                enterScope,
+                objectMapper.createObjectNode().set("category", objectMapper.createObjectNode().put("id", category.getId()))
+            )
+            .orElseThrow();
+
+        assertThat(claimRepository.countByBudgetId(budget.getId())).isEqualTo(2);
+        assertThat(outboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(budget.getId()))).hasSize(2);
+    }
+
+    @Test
+    @WithMockUser(username = OWNER)
+    void captures_economic_income_with_the_same_canonical_pipeline() {
+        User owner = owner();
+        FinancialAccount account = account(owner);
+        Category income = category(owner, CategoryType.INCOME);
+        transactionRepository.saveAndFlush(transaction(account, income, "40.00", TransactionFlow.IN));
+        Budget budget = budget(owner, "notification-income-transaction-service", income, BudgetType.INCOME);
+        timeZoneService.recordInitial(budget, "America/Mexico_City", LocalDate.of(2026, 3, 1), NOW);
+        BudgetNotificationPreference preference = BudgetNotificationPreference.create(budget, true, false, NOW);
+        preference.replace(true, false, Set.of(new BigDecimal("50.0000")), NOW);
+        preferenceRepository.saveAndFlush(preference);
+
+        financialTransactionService.save(transactionDto(account, income, "20.00", TransactionFlow.IN));
+
+        assertThat(claimRepository.countByBudgetId(budget.getId())).isEqualTo(1);
+        assertThat(outboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(budget.getId())))
+            .singleElement()
+            .satisfies(event -> assertThat(snapshot(event.getSnapshotJson()).budgetType()).isEqualTo(BudgetType.INCOME));
+    }
+
+    private int processAfter(CountDownLatch start, CountDownLatch ready) {
+        ready.countDown();
+        try {
+            if (!start.await(10, TimeUnit.SECONDS)) throw new AssertionError("Concurrent workers did not start");
+            return outboxWorker.processPending();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(exception);
+        }
+    }
+
+    private Void captureConcurrentExpense(CountDownLatch start, CountDownLatch ready, Long accountId, Long categoryId, String amount) {
+        ready.countDown();
+        try {
+            if (!start.await(10, TimeUnit.SECONDS)) throw new AssertionError("Concurrent mutations did not start");
+            thresholdService.capture(
+                OWNER,
+                "TEST_CONCURRENT_FINANCIAL_MUTATION",
+                () ->
+                    transactionRepository.saveAndFlush(
+                        transaction(accountRepository.getReferenceById(accountId), categoryRepository.getReferenceById(categoryId), amount)
+                    ),
+                transaction -> String.valueOf(transaction.getId())
+            );
+            return null;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(exception);
+        }
+    }
+
+    private BudgetThresholdNotificationSnapshot snapshot(String json) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                .findAndRegisterModules()
+                .readValue(json, BudgetThresholdNotificationSnapshot.class);
+        } catch (java.io.IOException exception) {
+            throw new AssertionError("Notification snapshot was not valid JSON", exception);
+        }
+    }
+
+    private FinancialTransactionDTO transactionDto(FinancialAccount account, Category category, String amount) {
+        return transactionDto(account, category, amount, TransactionFlow.OUT);
+    }
+
+    private FinancialTransactionDTO transactionDto(FinancialAccount account, Category category, String amount, TransactionFlow flow) {
+        FinancialTransactionDTO dto = new FinancialTransactionDTO();
+        dto.setTransactionDate(LocalDate.of(2026, 3, 15));
+        dto.setPostingDate(LocalDate.of(2026, 3, 15));
+        dto.setDescription("Manual notification expense " + amount);
+        dto.setAmount(new BigDecimal(amount));
+        dto.setFlow(flow);
+        dto.setOrigin(TransactionOrigin.MANUAL);
+        dto.setCreatedAt(NOW);
+        dto.setUpdatedAt(NOW);
+        FinancialAccountDTO accountDto = new FinancialAccountDTO();
+        accountDto.setId(account.getId());
+        dto.setAccount(accountDto);
+        dto.setCategory(category == null ? null : categoryDto(category));
+        return dto;
+    }
+
+    private CategoryDTO categoryDto(Category category) {
+        CategoryDTO dto = new CategoryDTO();
+        dto.setId(category.getId());
+        return dto;
+    }
+
+    private User owner() {
+        return TestUtil.findAll(entityManager, User.class)
+            .stream()
+            .filter(user -> OWNER.equals(user.getLogin()))
+            .findFirst()
+            .orElseGet(() -> {
+                User user = new User();
+                user.setLogin(OWNER);
+                user.setPassword("x".repeat(60));
+                user.setActivated(true);
+                user.setEmail("notification-owner@example.test");
+                user.setLangKey("en");
+                return userRepository.saveAndFlush(user);
+            });
+    }
+
     private Budget budget(User owner) {
+        return budget(owner, "notification-create");
+    }
+
+    private Budget budget(User owner, String creationRequestId) {
+        return budget(owner, creationRequestId, null);
+    }
+
+    private Budget budget(User owner, String creationRequestId, Category category) {
+        return budget(owner, creationRequestId, category, BudgetType.EXPENSE);
+    }
+
+    private Budget budget(User owner, String creationRequestId, Category category, BudgetType type) {
+        boolean selectedCategory = category != null;
         BudgetRevisionConfiguration configuration = new BudgetRevisionConfiguration(
             new BigDecimal("100.00"),
             1,
@@ -131,22 +439,16 @@ class BudgetNotificationEngineIT {
             null,
             null,
             BudgetAccountScopeMode.ALL,
-            BudgetCategoryScopeMode.ALL,
+            selectedCategory ? BudgetCategoryScopeMode.SELECTED : BudgetCategoryScopeMode.ALL,
             BudgetTagScopeMode.NONE,
             BudgetTagMatchMode.ANY
         );
-        Budget budget = Budget.create(
-            owner,
-            "Notification budget",
-            null,
-            BudgetType.EXPENSE,
-            CurrencyCode.MXN,
-            "notification-create",
-            "hash",
-            NOW
+        Budget budget = Budget.create(owner, "Notification budget", null, type, CurrencyCode.MXN, creationRequestId, "hash", NOW);
+        budget.addInitialRevision(
+            BudgetRevision.initial(configuration, Set.of(), selectedCategory ? Set.of(category) : Set.of(), Set.of(), NOW)
         );
-        budget.addInitialRevision(BudgetRevision.initial(configuration, Set.of(), Set.of(), Set.of(), NOW));
         Budget saved = budgetRepository.saveAndFlush(budget);
+        fixtureBudgetIds.add(saved.getId());
         scheduleRepository.saveAndFlush(
             BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), LocalDate.of(2026, 3, 1), 1, "INITIAL", NOW)
         );
@@ -154,7 +456,7 @@ class BudgetNotificationEngineIT {
     }
 
     private FinancialAccount account(User owner) {
-        return accountRepository.saveAndFlush(
+        FinancialAccount saved = accountRepository.saveAndFlush(
             new FinancialAccount()
                 .name("Notification MXN")
                 .institutionName("Bank")
@@ -167,22 +469,34 @@ class BudgetNotificationEngineIT {
                 .updatedAt(NOW)
                 .user(owner)
         );
+        fixtureAccountIds.add(saved.getId());
+        return saved;
     }
 
     private Category category(User owner) {
-        return categoryRepository.saveAndFlush(
+        return category(owner, CategoryType.EXPENSE);
+    }
+
+    private Category category(User owner, CategoryType type) {
+        Category saved = categoryRepository.saveAndFlush(
             new Category()
                 .name("Notification expense")
-                .categoryType(CategoryType.EXPENSE)
+                .categoryType(type)
                 .color("#225588")
                 .active(true)
                 .createdAt(NOW)
                 .updatedAt(NOW)
                 .user(owner)
         );
+        fixtureCategoryIds.add(saved.getId());
+        return saved;
     }
 
     private FinancialTransaction transaction(FinancialAccount account, Category category, String amount) {
+        return transaction(account, category, amount, TransactionFlow.OUT);
+    }
+
+    private FinancialTransaction transaction(FinancialAccount account, Category category, String amount, TransactionFlow flow) {
         return new FinancialTransaction()
             .account(account)
             .category(category)
@@ -190,7 +504,7 @@ class BudgetNotificationEngineIT {
             .postingDate(LocalDate.of(2026, 3, 15))
             .description("Notification expense " + amount)
             .amount(new BigDecimal(amount))
-            .flow(TransactionFlow.OUT)
+            .flow(flow)
             .origin(TransactionOrigin.MANUAL)
             .createdAt(NOW)
             .updatedAt(NOW);

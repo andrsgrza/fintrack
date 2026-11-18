@@ -10,5 +10,7 @@ import org.springframework.stereotype.Repository;
 public interface BudgetThresholdClaimRepository extends JpaRepository<BudgetThresholdClaim, Long> {
     boolean existsByBudgetIdAndPeriodStartAndNormalizedPercentage(Long budgetId, LocalDate periodStart, BigDecimal normalizedPercentage);
 
+    long countByBudgetId(Long budgetId);
+
     void deleteByBudgetId(Long budgetId);
 }

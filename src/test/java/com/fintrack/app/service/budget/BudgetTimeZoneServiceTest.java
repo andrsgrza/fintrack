@@ -1,6 +1,8 @@
 package com.fintrack.app.service.budget;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fintrack.app.domain.Budget;
@@ -74,5 +76,37 @@ class BudgetTimeZoneServiceTest {
         );
 
         assertThat(service.resolveCurrentZone(budget)).hasValueSatisfying(zone -> assertThat(zone.getId()).isEqualTo("Asia/Tokyo"));
+    }
+
+    @Test
+    void rejects_invalid_initial_zone_and_never_falls_back_when_assignment_is_missing() {
+        User owner = new User();
+        owner.setLogin("owner");
+        Budget budget = Budget.create(
+            owner,
+            "Food",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            "request-invalid-zone",
+            "hash",
+            Instant.parse("2026-01-01T00:00:00Z")
+        );
+        ReflectionTestUtils.setField(budget, "id", 43L);
+        BudgetTimeZoneService service = new BudgetTimeZoneService(
+            assignmentRepository,
+            budgetRepository,
+            scheduleRepository,
+            lifecycleEventRepository,
+            userRepository,
+            Clock.fixed(Instant.parse("2026-03-15T00:30:00Z"), ZoneOffset.UTC)
+        );
+        when(assignmentRepository.findAllByBudgetIdOrderByEffectivePeriodStartAsc(43L)).thenReturn(List.of());
+
+        assertThat(service.resolveCurrentZone(budget)).isEmpty();
+        assertThatThrownBy(() -> service.recordInitial(budget, "not/a-zone", LocalDate.of(2026, 3, 1), Instant.EPOCH))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("timeZone must be a valid IANA zone identifier.");
+        verifyNoInteractions(budgetRepository, scheduleRepository, lifecycleEventRepository, userRepository);
     }
 }

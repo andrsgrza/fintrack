@@ -28,6 +28,7 @@ import BudgetOverview from './budget/budget-overview';
 import BudgetCreate from './budget/budget-create';
 import BudgetDetail from './budget/budget-detail';
 import BudgetEdit from './budget/budget-edit';
+import NotificationHistory from './notifications/notification-history';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {
@@ -48,6 +49,7 @@ export default () => {
         <Route path="budgets/:budgetId/edit" element={<BudgetEdit />} />
         <Route path="budgets/:budgetId" element={<BudgetDetail />} />
         <Route path="budgets" element={<BudgetOverview />} />
+        <Route path="notifications" element={<NotificationHistory />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />
         <Route path="rules/*" element={<Rules />} />

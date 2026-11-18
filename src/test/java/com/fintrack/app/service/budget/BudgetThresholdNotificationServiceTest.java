@@ -123,6 +123,29 @@ class BudgetThresholdNotificationServiceTest {
     }
 
     @Test
+    void evaluates_every_enabled_budget_for_one_financial_mutation_without_mixing_their_claims() {
+        Budget incomeBudget = Budget.create(owner, "Income", null, BudgetType.INCOME, CurrencyCode.MXN, "income", "hash", NOW);
+        ReflectionTestUtils.setField(incomeBudget, "id", 12L);
+        BudgetNotificationPreference incomePreference = BudgetNotificationPreference.create(incomeBudget, true, false, NOW);
+        incomePreference.replace(true, false, Set.of(new BigDecimal("80.0000")), NOW);
+        when(preferenceRepository.findAllEnabledForOwnerEvaluation("user")).thenReturn(List.of(preference, incomePreference));
+        when(timeZoneService.resolveCurrentZone(incomeBudget)).thenReturn(Optional.of(ZONE));
+        when(evaluationService.evaluateForNotification(budget, ZONE)).thenReturn(
+            evaluation("40.00", "40.00"),
+            evaluation("60.00", "60.00")
+        );
+        when(evaluationService.evaluateForNotification(incomeBudget, ZONE)).thenReturn(
+            evaluation(12L, "70.00", "70.00"),
+            evaluation(12L, "90.00", "90.00")
+        );
+
+        service.capture("user", "FINANCIAL_TRANSACTION_CREATE", () -> "transaction-97", value -> value);
+
+        verify(claimRepository, times(2)).save(any(BudgetThresholdClaim.class));
+        verify(outboxRepository, times(2)).save(any(BudgetNotificationOutbox.class));
+    }
+
+    @Test
     void does_not_realert_a_claimed_or_already_above_threshold() {
         when(evaluationService.evaluateForNotification(budget, ZONE)).thenReturn(
             evaluation("90.00", "90.00"),
@@ -191,8 +214,12 @@ class BudgetThresholdNotificationServiceTest {
     }
 
     private BudgetEvaluationResult evaluation(String actual, String progress) {
+        return evaluation(11L, actual, progress);
+    }
+
+    private BudgetEvaluationResult evaluation(Long budgetId, String actual, String progress) {
         return new BudgetEvaluationResult(
-            11L,
+            budgetId,
             "Food",
             BudgetType.EXPENSE,
             CurrencyCode.MXN,

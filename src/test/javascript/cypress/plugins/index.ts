@@ -13,6 +13,28 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { lighthouse, pa11y, prepareAudit } from 'cypress-audit';
 
+const delay = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+type NotificationPollingInput = {
+  baseUrl: string;
+  bearerToken: string;
+  expectedCount: number;
+  timeoutMs: number;
+};
+
+const isNotificationPollingInput = (value: unknown): value is NotificationPollingInput => {
+  if (value === null || typeof value !== 'object') return false;
+  const candidate = value as Partial<NotificationPollingInput>;
+  return (
+    typeof candidate.baseUrl === 'string' &&
+    typeof candidate.bearerToken === 'string' &&
+    Number.isInteger(candidate.expectedCount) &&
+    candidate.expectedCount > 0 &&
+    Number.isInteger(candidate.timeoutMs) &&
+    candidate.timeoutMs > 0
+  );
+};
+
 export default (on: Cypress.PluginEvents, config: Cypress.PluginConfigOptions) => {
   on('before:browser:launch', (browser, launchOptions) => {
     prepareAudit(launchOptions);
@@ -31,6 +53,27 @@ export default (on: Cypress.PluginEvents, config: Cypress.PluginConfigOptions) =
     table(message) {
       console.table(message);
       return null;
+    },
+    async waitForNotifications(input: unknown) {
+      if (!isNotificationPollingInput(input)) throw new Error('Invalid notification polling input.');
+      const endpoint = new URL('/api/notifications?page=0&size=100', input.baseUrl);
+      const deadline = Date.now() + input.timeoutMs;
+      do {
+        const response = await fetch(endpoint, { headers: { Authorization: `Bearer ${input.bearerToken}` } });
+        if (!response.ok) throw new Error(`Notification polling returned HTTP ${response.status}.`);
+        const body: unknown = await response.json();
+        if (
+          body !== null &&
+          typeof body === 'object' &&
+          'totalElements' in body &&
+          typeof body.totalElements === 'number' &&
+          body.totalElements >= input.expectedCount
+        ) {
+          return true;
+        }
+        await delay(100);
+      } while (Date.now() < deadline);
+      throw new Error(`Timed out waiting for ${input.expectedCount} materialized notifications.`);
     },
   });
 

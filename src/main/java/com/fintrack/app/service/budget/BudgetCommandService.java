@@ -47,6 +47,7 @@ public class BudgetCommandService {
     private final FinancialAccountRepository financialAccountRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
+    private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final Clock clock;
 
@@ -64,6 +65,7 @@ public class BudgetCommandService {
         FinancialAccountRepository financialAccountRepository,
         CategoryRepository categoryRepository,
         TagRepository tagRepository,
+        UserRepository userRepository,
         CurrentUserService currentUserService,
         Clock clock
     ) {
@@ -80,6 +82,7 @@ public class BudgetCommandService {
         this.financialAccountRepository = financialAccountRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
+        this.userRepository = userRepository;
         this.currentUserService = currentUserService;
         this.clock = clock;
     }
@@ -300,7 +303,7 @@ public class BudgetCommandService {
 
     @Transactional(readOnly = true)
     public BudgetHistoryView history(Long budgetId) {
-        Budget budget = ownedBudget(budgetId);
+        Budget budget = ownedBudgetForRead(budgetId);
         TimelineData data = timelineData(budget);
         Set<Long> activeScheduleIds = data
             .timeline()
@@ -319,13 +322,13 @@ public class BudgetCommandService {
 
     @Transactional(readOnly = true)
     public BudgetHistoryView.Revision effectiveRevision(Long budgetId, LocalDate periodStart) {
-        Budget budget = ownedBudget(budgetId);
+        Budget budget = ownedBudgetForRead(budgetId);
         return revisionView(timelineData(budget).timeline().resolveEffectiveRevision(periodStart).revision());
     }
 
     @Transactional(readOnly = true)
     public List<BudgetOperationalPeriodView> periods(Long budgetId, long firstIndex, long lastIndex, String timeZone) {
-        Budget budget = ownedBudget(budgetId);
+        Budget budget = ownedBudgetForRead(budgetId);
         LocalDate today = localToday(timeZone);
         return timelineData(budget)
             .timeline()
@@ -631,9 +634,23 @@ public class BudgetCommandService {
 
     private Budget ownedBudget(Long budgetId) {
         if (budgetId == null || budgetId <= 0) throw invalid("A Budget identifier is required.");
-        return budgetRepository
-            .findOneByIdAndUserLogin(budgetId, currentUserService.getCurrentUserLogin())
-            .orElseThrow(() -> invalid("Budget not found."));
+        // Budget configuration can change the period, scope, or lifecycle used by a threshold evaluation. Acquire
+        // the same first owner lock as financial capture and notification-preference updates before touching the
+        // Budget aggregate, so a financial mutation sees either the complete old configuration or the complete new
+        // one. Every relevant write path therefore uses owner -> Budget as its lock order.
+        String login = currentUserService.getCurrentUserLogin();
+        userRepository.findOneForBudgetNotificationMutationByLogin(login).orElseThrow(() -> invalid("Current user not found."));
+        return budgetRepository.findOneByIdAndUserLogin(budgetId, login).orElseThrow(() -> invalid("Budget not found."));
+    }
+
+    /**
+     * Read endpoints must retain the same owner predicate without acquiring the mutation lock. PostgreSQL correctly
+     * rejects that lock inside Spring's read-only transaction, and history reads never alter Budget configuration.
+     */
+    private Budget ownedBudgetForRead(Long budgetId) {
+        if (budgetId == null || budgetId <= 0) throw invalid("A Budget identifier is required.");
+        String login = currentUserService.getCurrentUserLogin();
+        return budgetRepository.findOneByIdAndUserLogin(budgetId, login).orElseThrow(() -> invalid("Budget not found."));
     }
 
     private BudgetLifecycleEvent ownedEvent(List<BudgetLifecycleEvent> events, Long id) {

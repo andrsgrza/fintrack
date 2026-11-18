@@ -87,6 +87,9 @@ class FinancialAccountHardDeleteServiceTest {
     private TransactionRuleConditionRepository transactionRuleConditionRepository;
 
     @Mock
+    private FinancialTransactionService financialTransactionService;
+
+    @Mock
     private CurrentUserService currentUserService;
 
     @InjectMocks
@@ -160,8 +163,7 @@ class FinancialAccountHardDeleteServiceTest {
         verify(transactionCandidateRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
         verify(transactionCandidateRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(transactionBatchRepository, never()).deleteByAccountId(ACCOUNT_ID);
-        verify(financialTransactionRepository, never()).deleteTagLinksByAccountId(ACCOUNT_ID);
-        verify(financialTransactionRepository, never()).deleteByAccountId(ACCOUNT_ID);
+        verify(financialTransactionService, never()).deleteAllForAccount(account);
         verify(transactionIngestionRepository, never()).deleteByAccountId(ACCOUNT_ID);
         verify(budgetRevisionRepository, never()).deleteAccountLinksByAccountId(ACCOUNT_ID);
         verify(financialSubscriptionRepository, never()).clearAccountByAccountId(ACCOUNT_ID);
@@ -180,7 +182,7 @@ class FinancialAccountHardDeleteServiceTest {
             internalTransferRepository,
             transactionCandidateRepository,
             transactionBatchRepository,
-            financialTransactionRepository,
+            financialTransactionService,
             transactionIngestionRepository,
             budgetRevisionRepository,
             financialSubscriptionRepository,
@@ -192,8 +194,7 @@ class FinancialAccountHardDeleteServiceTest {
         order.verify(transactionCandidateRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
         order.verify(transactionCandidateRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(transactionBatchRepository).deleteByAccountId(ACCOUNT_ID);
-        order.verify(financialTransactionRepository).deleteTagLinksByAccountId(ACCOUNT_ID);
-        order.verify(financialTransactionRepository).deleteByAccountId(ACCOUNT_ID);
+        order.verify(financialTransactionService).deleteAllForAccount(account);
         order.verify(transactionIngestionRepository).deleteByAccountId(ACCOUNT_ID);
         order.verify(budgetRevisionRepository).deleteAccountLinksByAccountId(ACCOUNT_ID);
         order.verify(financialSubscriptionRepository).clearAccountByAccountId(ACCOUNT_ID);

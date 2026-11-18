@@ -83,3 +83,31 @@ Navbar styles
   top: 0;
   z-index: 1031;
 }
+.notification-badge {
+  position: absolute;
+  top: 0;
+  right: -0.35rem;
+  min-width: 1rem;
+  padding: 0.05rem 0.25rem;
+  border-radius: 1rem;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.65rem;
+  line-height: 1rem;
+  text-align: center;
+}
+
+.notification-preview {
+  width: min(24rem, calc(100vw - 1.5rem));
+  max-height: min(32rem, calc(100vh - 5rem));
+  overflow-y: auto;
+}
+
+.notification-preview-item {
+  white-space: normal;
+}
+
+.notification-unread {
+  border-left: 0.25rem solid var(--bs-primary);
+  background-color: rgba(13, 110, 253, 0.06);
+}

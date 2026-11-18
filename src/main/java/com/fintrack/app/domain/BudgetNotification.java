@@ -76,4 +76,31 @@ public class BudgetNotification implements Serializable {
     public Instant getReadAt() {
         return readAt;
     }
+
+    public Budget getBudget() {
+        return budget;
+    }
+
+    public BudgetNotificationType getNotificationType() {
+        return notificationType;
+    }
+
+    public String getSnapshotJson() {
+        return snapshotJson;
+    }
+
+    public Instant getEventAt() {
+        return eventAt;
+    }
+
+    public Instant getMaterializedAt() {
+        return materializedAt;
+    }
+
+    /** Sets the first server-authoritative read time only; repeated browser requests are intentionally idempotent. */
+    public void markRead(Instant readTime) {
+        if (readAt == null) {
+            readAt = readTime;
+        }
+    }
 }

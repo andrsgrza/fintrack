@@ -23,6 +23,7 @@ import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
+import com.fintrack.app.repository.BudgetTimeZoneAssignmentRepository;
 import com.fintrack.app.service.budget.BudgetCreateCommand;
 import com.fintrack.app.service.budget.BudgetInitialRevisionCommand;
 import java.math.BigDecimal;
@@ -72,6 +73,9 @@ class BudgetCreationConcurrencyIT {
     private BudgetRevisionScheduleRepository revisionScheduleRepository;
 
     @Autowired
+    private BudgetTimeZoneAssignmentRepository timeZoneAssignmentRepository;
+
+    @Autowired
     private TransactionTemplate transactionTemplate;
 
     private final List<BudgetReference> fixtures = new ArrayList<>();
@@ -86,6 +90,7 @@ class BudgetCreationConcurrencyIT {
                         revisionScheduleRepository.deleteAll(
                             revisionScheduleRepository.findAllByBudgetIdOrderBySequenceNumber(budget.getId())
                         );
+                        timeZoneAssignmentRepository.deleteByBudgetId(budget.getId());
                         budgetRepository.delete(budget);
                     });
             }
