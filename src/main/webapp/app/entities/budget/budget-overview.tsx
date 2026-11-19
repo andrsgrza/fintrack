@@ -6,7 +6,17 @@ import { useAppSelector } from 'app/config/store';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 
 import { BudgetEvaluation, BudgetOperationalStatus, BudgetOverviewItem, BudgetType, getBudgetOverview } from './budget-api';
-import { copy, dateRange, formatBudgetAmount, userFacingError } from './budget-utils';
+import {
+  absoluteBudgetDecimal,
+  boundedBudgetProgress,
+  copy,
+  dateRange,
+  exceedsBudgetProgress,
+  formatBudgetAmount,
+  formatBudgetPercentage,
+  isBudgetDecimalNegative,
+  userFacingError,
+} from './budget-utils';
 
 const stateLabel = (locale: string, status: BudgetOperationalStatus) =>
   copy(
@@ -46,7 +56,8 @@ const BudgetCard = ({ item, locale, referenceDate }: { item: BudgetOverviewItem;
   const evaluation = item.evaluation;
   const actual = evaluation?.actualAmount;
   const progress = evaluation?.progressPercentage;
-  const progressWidth = progress === null || progress === undefined ? 0 : Math.max(0, Math.min(Number(progress), 100));
+  const progressWidth = boundedBudgetProgress(progress) ?? 0;
+  const exceedsProgress = exceedsBudgetProgress(progress);
   const evaluationMessage = evaluation ? evaluationLabel(locale, evaluation) : null;
   const title =
     item.type === 'EXPENSE' ? copy(locale, 'Límite de gasto', 'Expense limit') : copy(locale, 'Meta de ingresos', 'Income goal');
@@ -99,26 +110,28 @@ const BudgetCard = ({ item, locale, referenceDate }: { item: BudgetOverviewItem;
               <>
                 <div className="d-flex justify-content-between gap-2 small">
                   <span>{goalLabel(locale, evaluation)}</span>
-                  <strong>{Number(progress).toFixed(2)}%</strong>
+                  <strong>{formatBudgetPercentage(progress, locale)}</strong>
                 </div>
                 <div
                   className="progress"
                   role="progressbar"
                   aria-label={copy(locale, 'Progreso del presupuesto', 'Budget progress')}
-                  aria-valuenow={Number(progress)}
+                  aria-valuenow={progressWidth}
                   aria-valuemin={0}
                   aria-valuemax={100}
+                  aria-valuetext={formatBudgetPercentage(progress, locale)}
+                  data-cy="budgetProgress"
                 >
                   <div
-                    className={`progress-bar ${Number(progress) > 100 ? 'bg-danger' : item.type === 'EXPENSE' ? 'bg-warning' : 'bg-success'}`}
+                    className={`progress-bar ${exceedsProgress ? 'bg-danger' : item.type === 'EXPENSE' ? 'bg-warning' : 'bg-success'}`}
                     style={{ width: `${progressWidth}%` }}
                   />
                 </div>
                 <div className="small text-muted">
                   {evaluation.remainingAmount !== null
-                    ? evaluation.remainingAmount >= 0
+                    ? !isBudgetDecimalNegative(evaluation.remainingAmount)
                       ? `${copy(locale, 'Restante', 'Remaining')}: ${formatBudgetAmount(evaluation.remainingAmount, item.currency, locale)}`
-                      : `${copy(locale, 'Excedido', 'Exceeded')}: ${formatBudgetAmount(Math.abs(evaluation.remainingAmount), item.currency, locale)}`
+                      : `${copy(locale, 'Excedido', 'Exceeded')}: ${formatBudgetAmount(absoluteBudgetDecimal(evaluation.remainingAmount), item.currency, locale)}`
                     : null}
                 </div>
               </>

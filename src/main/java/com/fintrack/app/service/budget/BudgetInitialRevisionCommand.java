@@ -1,5 +1,6 @@
 package com.fintrack.app.service.budget;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fintrack.app.domain.enumeration.*;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -8,7 +9,7 @@ import java.util.Set;
 
 /** Transport input for the immutable first revision; reference IDs are resolved server-side. */
 public record BudgetInitialRevisionCommand(
-    @NotNull BigDecimal targetAmount,
+    @NotNull @JsonDeserialize(using = BudgetDecimalJson.TargetAmountDeserializer.class) BigDecimal targetAmount,
     @NotNull Integer intervalCount,
     @NotNull BudgetIntervalUnit intervalUnit,
     @NotNull BudgetAlignment alignment,

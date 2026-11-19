@@ -503,8 +503,7 @@ public class BudgetCommandService {
 
     private RevisionDraft revisionDraft(Budget budget, BudgetInitialRevisionCommand command) {
         require(command != null, "Revision configuration is required.");
-        BigDecimal target = command.targetAmount();
-        require(target != null && target.signum() > 0, "Budget target amount must be greater than zero.");
+        BigDecimal target = BudgetTargetAmountValidator.requireValid(command.targetAmount());
         require(command.intervalCount() != null && command.intervalCount() > 0, "Budget interval count must be greater than zero.");
         require(
             command.intervalUnit() != null &&

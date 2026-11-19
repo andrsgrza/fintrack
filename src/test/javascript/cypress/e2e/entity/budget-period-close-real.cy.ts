@@ -24,8 +24,8 @@ describe('Budget period-close notification producer real acceptance', { retries:
       budgetName: string;
       periodStart: string;
       periodEndExclusive: string;
-      actualAmount: number;
-      targetAmount: number;
+      actualAmount: string;
+      targetAmount: string;
       logicalEventKey: string;
     };
   };
@@ -261,8 +261,8 @@ describe('Budget period-close notification producer real acceptance', { retries:
           budgetName,
           periodStart: '2026-03-31',
           periodEndExclusive: '2026-04-01',
-          actualAmount: 60,
-          targetAmount: 100,
+          actualAmount: '60.00',
+          targetAmount: '100.00',
           logicalEventKey: eventKey,
         });
         return periodClosePreference(budget.budgetId).then(preference =>
@@ -280,7 +280,7 @@ describe('Budget period-close notification producer real acceptance', { retries:
     });
 
     cy.visit('/notifications');
-    cy.contains('article', budgetName).should('contain.text', 'Cierre de período registrado');
+    cy.contains('article', budgetName).should('contain.text', 'Período cerrado');
     cy.screenshot('budget-period-close-real', { capture: 'viewport' });
   });
 

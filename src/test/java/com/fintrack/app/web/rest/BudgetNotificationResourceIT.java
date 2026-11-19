@@ -15,12 +15,15 @@ import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.BudgetNotification;
 import com.fintrack.app.domain.BudgetNotificationOutbox;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.domain.enumeration.BudgetNotificationType;
 import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.repository.BudgetNotificationOutboxRepository;
 import com.fintrack.app.repository.BudgetNotificationRepository;
 import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.UserRepository;
+import com.fintrack.app.service.budget.BudgetEvaluationStatus;
+import com.fintrack.app.service.budget.BudgetPeriodCloseNotificationSnapshot;
 import com.fintrack.app.service.budget.BudgetThresholdNotificationSnapshot;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -150,6 +153,34 @@ class BudgetNotificationResourceIT {
 
     @Test
     @Transactional
+    void returns_mixed_threshold_and_period_close_snapshots_without_rewriting_the_closing_financial_evidence() throws Exception {
+        Budget budget = budget(owner(), "notification-mixed-types");
+        notification(owner(), budget, "threshold", NOW.minusSeconds(30), NOW.minusSeconds(30));
+        BudgetNotification closing = periodCloseNotification(owner(), budget, NOW, NOW.plusSeconds(1));
+
+        restMockMvc
+            .perform(get("/api/notifications").param("page", "0").param("size", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(2))
+            .andExpect(jsonPath("$.notifications[0].notificationType").value("PERIOD_CLOSED"))
+            .andExpect(jsonPath("$.notifications[0].snapshot.budgetName").value("Notification budget notification-mixed-types"))
+            .andExpect(jsonPath("$.notifications[0].snapshot.periodStart").value("2026-02-01"))
+            .andExpect(jsonPath("$.notifications[0].snapshot.periodEndExclusive").value("2026-03-01"))
+            .andExpect(jsonPath("$.notifications[0].snapshot.actualAmount").value("60.00"))
+            .andExpect(jsonPath("$.notifications[0].snapshot.targetAmount").value("100.00"))
+            .andExpect(jsonPath("$.notifications[0].snapshot.progressPercentage").value("60.00"));
+
+        restMockMvc.perform(patch("/api/notifications/{id}/read", closing.getId())).andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        BudgetNotification persisted = notificationRepository.findById(closing.getId()).orElseThrow();
+        assertThat(persisted.getSnapshotJson()).contains("\"actualAmount\":\"60.00\"").contains("\"targetAmount\":\"100.00\"");
+        assertThat(persisted.getReadAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @Transactional
     void marksOnlyExistingOwnedUnreadNotificationsAndKeepsLaterMaterializationsUnread() throws Exception {
         Budget ownerBudget = budget(owner(), "notification-mark-all");
         BudgetNotification eligible = notification(owner(), ownerBudget, "eligible", NOW.minusSeconds(30), NOW.minusSeconds(30));
@@ -269,6 +300,38 @@ class BudgetNotificationResourceIT {
         );
         BudgetNotification notification = BudgetNotification.materialize(outbox, materializedAt);
         return notificationRepository.saveAndFlush(notification);
+    }
+
+    private BudgetNotification periodCloseNotification(User owner, Budget budget, Instant logicalClosedAt, Instant materializedAt)
+        throws Exception {
+        BudgetPeriodCloseNotificationSnapshot snapshot = new BudgetPeriodCloseNotificationSnapshot(
+            budget.getId(),
+            budget.getName(),
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            LocalDate.of(2026, 2, 1),
+            LocalDate.of(2026, 3, 1),
+            "America/Mexico_City",
+            7L,
+            new BigDecimal("100.00"),
+            new BigDecimal("60.00"),
+            new BigDecimal("60.00"),
+            BudgetEvaluationStatus.EVALUATED,
+            logicalClosedAt,
+            materializedAt,
+            "PERIOD_CLOSED:" + budget.getId() + ":2026-02-01"
+        );
+        BudgetNotificationOutbox outbox = outboxRepository.saveAndFlush(
+            BudgetNotificationOutbox.pending(
+                owner,
+                budget,
+                BudgetNotificationType.PERIOD_CLOSED,
+                snapshot.logicalEventKey(),
+                objectMapper.writeValueAsString(snapshot),
+                logicalClosedAt
+            )
+        );
+        return notificationRepository.saveAndFlush(BudgetNotification.materialize(outbox, materializedAt));
     }
 
     @TestConfiguration(proxyBeanMethods = false)

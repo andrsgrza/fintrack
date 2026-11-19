@@ -4,6 +4,8 @@ export type BudgetType = 'EXPENSE' | 'INCOME';
 export type BudgetOperationalStatus = 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'COMPLETED';
 export type BudgetScopeMode = 'ALL' | 'SELECTED' | 'NONE';
 export type BudgetTagMatchMode = 'ANY' | 'ALL';
+/** Exact plain decimal transmitted by the Budget HTTP contract; never coerce monetary values through Number. */
+export type BudgetDecimal = string;
 
 export type BudgetPeriod = { index: number; startInclusive: string; endExclusive: string };
 
@@ -15,13 +17,13 @@ export type BudgetEvaluation = {
   periodIndex: number;
   startInclusive: string;
   endExclusive: string;
-  targetAmount: number;
+  targetAmount: BudgetDecimal;
   operationalStatus: BudgetOperationalStatus;
   periodTiming: 'HISTORICAL' | 'CURRENT' | 'FUTURE';
   evaluationApplicable: boolean;
-  actualAmount: number | null;
-  progressPercentage: number | null;
-  remainingAmount: number | null;
+  actualAmount: BudgetDecimal | null;
+  progressPercentage: BudgetDecimal | null;
+  remainingAmount: BudgetDecimal | null;
   goalStatus: string;
   evaluationStatus: string;
   semanticAvailability: string | null;
@@ -34,7 +36,7 @@ export type BudgetRevision = {
   id: number;
   number: number;
   recordedAt: string;
-  targetAmount: number;
+  targetAmount: BudgetDecimal;
   intervalUnit: 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
   intervalCount: number;
   alignment: 'ANCHORED' | 'NATURAL' | 'CUSTOM';
@@ -137,7 +139,7 @@ export type BudgetCreatePayload = {
   clientRequestId: string;
   timeZone: string;
   initialRevision: Omit<CalendarPreviewDraft, 'timeZone'> & {
-    targetAmount: number;
+    targetAmount: BudgetDecimal;
     accountScopeMode: 'ALL' | 'SELECTED';
     accountIds: number[];
     categoryScopeMode: 'ALL' | 'SELECTED';
@@ -171,7 +173,7 @@ export type BudgetNotificationPreferences = {
 export type BudgetCreated = { id: number; name: string; type: BudgetType; currency: string };
 
 export type BudgetRevisionConfiguration = Omit<BudgetCreatePayload['initialRevision'], 'targetAmount'> & {
-  targetAmount: number;
+  targetAmount: BudgetDecimal;
 };
 
 export type BudgetRevisionSchedulePayload = {

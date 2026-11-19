@@ -152,6 +152,43 @@ class BudgetCreationServiceTest {
     }
 
     @Test
+    void rejectsAnOverPreciseInitialTargetBeforePersistingAnything() {
+        BudgetInitialRevisionCommand invalidRevision = new BudgetInitialRevisionCommand(
+            new BigDecimal("100.999"),
+            1,
+            BudgetIntervalUnit.MONTH,
+            BudgetAlignment.ANCHORED,
+            LocalDate.of(2026, 3, 16),
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null,
+            BudgetAccountScopeMode.ALL,
+            Set.of(),
+            BudgetCategoryScopeMode.ALL,
+            Set.of(),
+            BudgetTagScopeMode.NONE,
+            Set.of(),
+            BudgetTagMatchMode.ANY
+        );
+        BudgetCreateCommand invalid = new BudgetCreateCommand(
+            "Precise food",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            "too-many-decimals",
+            "America/Mexico_City",
+            invalidRevision
+        );
+
+        assertThatThrownBy(() -> service.create(invalid))
+            .isInstanceOf(BudgetCommandException.class)
+            .hasMessageContaining("at most two decimal places");
+        verify(budgetRepository, never()).saveAndFlush(any());
+        verify(notificationPreferenceService, never()).createForBudget(any(), any(), any());
+    }
+
+    @Test
     void rejectsAnOwnedAccountWhoseCurrencyDoesNotMatchTheBudgetBeforeAnyBudgetIsPersisted() {
         FinancialAccount usdAccount = new FinancialAccount();
         usdAccount.setId(11L);

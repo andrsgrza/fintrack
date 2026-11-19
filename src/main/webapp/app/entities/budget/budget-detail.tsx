@@ -28,7 +28,19 @@ import {
 } from './budget-api';
 import { BudgetLifecycleActions, BudgetLifecycleStatus } from './budget-lifecycle-actions';
 import { BudgetDetailNotificationPreferences } from './budget-detail-notification-preferences';
-import { browserTimeZone, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
+import {
+  absoluteBudgetDecimal,
+  boundedBudgetProgress,
+  browserTimeZone,
+  copy,
+  dateRange,
+  exceedsBudgetProgress,
+  formatBudgetAmount,
+  formatBudgetDate,
+  formatBudgetPercentage,
+  isBudgetDecimalNegative,
+  userFacingError,
+} from './budget-utils';
 
 const HISTORY_PAGE_SIZE = 10;
 
@@ -149,7 +161,8 @@ const ScopeSummary = ({ locale, revision, names }: { locale: string; revision: B
 
 const EvaluationSummary = ({ locale, item, evaluation }: { locale: string; item: BudgetOverviewItem; evaluation: BudgetEvaluation }) => {
   const progress = evaluation.progressPercentage;
-  const width = progress === null ? 0 : Math.max(0, Math.min(Number(progress), 100));
+  const width = boundedBudgetProgress(progress) ?? 0;
+  const exceedsProgress = exceedsBudgetProgress(progress);
   const actualLabel = item.type === 'EXPENSE' ? copy(locale, 'Gastado', 'Spent') : copy(locale, 'Ingresado', 'Received');
   const targetLabel = item.type === 'EXPENSE' ? copy(locale, 'Límite', 'Limit') : copy(locale, 'Meta', 'Goal');
   const unavailable = evaluationLabel(locale, evaluation) ?? evaluation.message;
@@ -179,7 +192,7 @@ const EvaluationSummary = ({ locale, item, evaluation }: { locale: string; item:
         <div className="col-12 col-sm-4">
           <div className="small text-muted text-uppercase fw-semibold">{copy(locale, 'Avance', 'Progress')}</div>
           <div className="fs-5 fw-semibold">
-            {evaluation.evaluationApplicable && progress !== null ? `${Number(progress).toFixed(2)}%` : '—'}
+            {evaluation.evaluationApplicable && progress !== null ? formatBudgetPercentage(progress, locale) : '—'}
           </div>
         </div>
       </div>
@@ -187,13 +200,14 @@ const EvaluationSummary = ({ locale, item, evaluation }: { locale: string; item:
         <>
           <div className="d-flex justify-content-between gap-2 small mt-3">
             <span>{goalLabel(locale, evaluation)}</span>
-            {evaluation.remainingAmount === null ? null : evaluation.remainingAmount >= 0 ? (
+            {evaluation.remainingAmount === null ? null : !isBudgetDecimalNegative(evaluation.remainingAmount) ? (
               <span>
                 {copy(locale, 'Restante', 'Remaining')}: {formatBudgetAmount(evaluation.remainingAmount, item.currency, locale)}
               </span>
             ) : (
               <span>
-                {copy(locale, 'Excedido', 'Exceeded')}: {formatBudgetAmount(Math.abs(evaluation.remainingAmount), item.currency, locale)}
+                {copy(locale, 'Excedido', 'Exceeded')}:{' '}
+                {formatBudgetAmount(absoluteBudgetDecimal(evaluation.remainingAmount), item.currency, locale)}
               </span>
             )}
           </div>
@@ -201,12 +215,14 @@ const EvaluationSummary = ({ locale, item, evaluation }: { locale: string; item:
             className="progress mt-2"
             role="progressbar"
             aria-label={copy(locale, 'Avance del presupuesto', 'Budget progress')}
-            aria-valuenow={Number(progress)}
+            aria-valuenow={width}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-valuetext={formatBudgetPercentage(progress, locale)}
+            data-cy="budgetDetailProgress"
           >
             <div
-              className={`progress-bar ${Number(progress) > 100 ? 'bg-danger' : item.type === 'EXPENSE' ? 'bg-warning' : 'bg-success'}`}
+              className={`progress-bar ${exceedsProgress ? 'bg-danger' : item.type === 'EXPENSE' ? 'bg-warning' : 'bg-success'}`}
               style={{ width: `${width}%` }}
             />
           </div>
@@ -785,7 +801,9 @@ const BudgetDetail = () => {
                           <>
                             {formatBudgetAmount(candidate.actualAmount, item.currency, locale)}
                             {candidate.progressPercentage === null ? null : (
-                              <span className="small text-muted ms-1">({Number(candidate.progressPercentage).toFixed(2)}%)</span>
+                              <span className="small text-muted ms-1">
+                                ({formatBudgetPercentage(candidate.progressPercentage, locale)})
+                              </span>
                             )}
                           </>
                         ) : (

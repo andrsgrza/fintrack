@@ -31,7 +31,16 @@ import {
   updateBudgetMetadata,
 } from './budget-api';
 import { BudgetScopeSection, ScopeMode, TagScopeMode, categoryCompatible } from './budget-create';
-import { browserTimeZone, copy, dateRange, formatBudgetAmount, formatBudgetDate, userFacingError } from './budget-utils';
+import {
+  browserTimeZone,
+  budgetTargetValidationError,
+  calendarValidationError,
+  copy,
+  dateRange,
+  formatBudgetAmount,
+  formatBudgetDate,
+  userFacingError,
+} from './budget-utils';
 
 type EffectiveChoice = 'CURRENT' | 'NEXT' | 'FUTURE';
 
@@ -161,7 +170,7 @@ const BudgetEdit = () => {
       setCurrentEvaluation(nextEvaluation);
       setCurrentRevision(nextRevision);
       setPeriods(nextPeriods);
-      setAmount(String(nextRevision.targetAmount));
+      setAmount(nextRevision.targetAmount);
       setAccountScope(nextRevision.accountScopeMode);
       setAccountIds(nextRevision.accountIds);
       setCategoryScope(nextRevision.categoryScopeMode);
@@ -238,8 +247,8 @@ const BudgetEdit = () => {
   const scheduled = item?.operationalStatus === 'SCHEDULED';
 
   const validateRevision = () => {
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0)
-      return copy(locale, 'Escribe un importe objetivo mayor que cero.', 'Enter a target amount greater than zero.');
+    const targetError = budgetTargetValidationError(amount, locale);
+    if (targetError) return targetError;
     if (!effectiveStart) return copy(locale, 'Elige un período válido.', 'Choose a valid period.');
     if (accountScope === 'SELECTED' && !accountIds.length)
       return copy(locale, 'Selecciona al menos una cuenta.', 'Select at least one account.');
@@ -252,7 +261,7 @@ const BudgetEdit = () => {
   const revisionPayload = (): BudgetRevisionConfiguration | null => {
     if (!currentRevision) return null;
     return {
-      targetAmount: Number(amount),
+      targetAmount: amount,
       intervalUnit: currentRevision.intervalUnit,
       intervalCount: currentRevision.intervalCount,
       alignment: currentRevision.alignment,
@@ -354,7 +363,7 @@ const BudgetEdit = () => {
               'Este presupuesto cambió en otro lugar. Recarga y revisa antes de confirmar.',
               'This budget changed elsewhere. Reload and review before confirming.',
             )
-          : userFacingError(problem, copy(locale, 'No se pudo guardar la revisión.', 'The revision could not be saved.')),
+          : calendarValidationError(problem, locale, copy(locale, 'No se pudo guardar la revisión.', 'The revision could not be saved.')),
       );
     } finally {
       revisionInFlight.current = false;
@@ -572,9 +581,8 @@ const BudgetEdit = () => {
                       <Label for="budget-edit-amount">{copy(locale, 'Nuevo objetivo', 'New target')}</Label>
                       <Input
                         id="budget-edit-amount"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={amount}
                         onChange={event => {
                           setAmount(event.target.value);

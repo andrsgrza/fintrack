@@ -1,12 +1,16 @@
 package com.fintrack.app.service.budget;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
 import com.fintrack.app.domain.BudgetNotification;
 import com.fintrack.app.repository.BudgetNotificationRepository;
 import com.fintrack.app.service.CurrentUserService;
 import java.time.Clock;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -20,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class BudgetNotificationService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final Logger LOG = LoggerFactory.getLogger(BudgetNotificationService.class);
 
     private final BudgetNotificationRepository notificationRepository;
     private final CurrentUserService currentUserService;
@@ -83,18 +88,24 @@ public class BudgetNotificationService {
     }
 
     private BudgetNotificationView toView(BudgetNotification notification) {
+        return new BudgetNotificationView(
+            notification.getId(),
+            notification.getBudget().getId(),
+            notification.getNotificationType(),
+            parseSnapshot(notification),
+            notification.getEventAt(),
+            notification.getMaterializedAt(),
+            notification.getReadAt()
+        );
+    }
+
+    /** A corrupt historical row must not prevent its owner from reading every other notification. */
+    private JsonNode parseSnapshot(BudgetNotification notification) {
         try {
-            return new BudgetNotificationView(
-                notification.getId(),
-                notification.getBudget().getId(),
-                notification.getNotificationType(),
-                objectMapper.readTree(notification.getSnapshotJson()),
-                notification.getEventAt(),
-                notification.getMaterializedAt(),
-                notification.getReadAt()
-            );
+            return objectMapper.readTree(notification.getSnapshotJson());
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Stored Budget notification snapshot is invalid", exception);
+            LOG.warn("Budget notification {} has an unreadable immutable snapshot", notification.getId());
+            return NullNode.getInstance();
         }
     }
 }

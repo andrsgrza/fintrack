@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
 import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
@@ -142,6 +143,82 @@ class BudgetResourceIT {
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").value(firstId));
         assertThat(budgetRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @Transactional
+    void persistsExactStringTargetsAndRejectsUnsupportedScaleOrPrecisionWithoutChangingExistingHistory() throws Exception {
+        String exactTarget = "9999999999999999999.99";
+        ObjectNode creation = objectMapper.valueToTree(command("exact-decimal-target", Set.of(), Set.of(), Set.of(), TEST_TODAY));
+        ((ObjectNode) creation.path("initialRevision")).put("targetAmount", exactTarget);
+
+        String created = restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(creation)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.initialRevision.targetAmount").value(exactTarget))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long budgetId = objectMapper.readTree(created).path("id").asLong();
+        long version = objectMapper.readTree(created).path("version").asLong();
+
+        entityManager.flush();
+        entityManager.clear();
+        Budget persisted = budgetRepository.findById(budgetId).orElseThrow();
+        assertThat(persisted.getRevisions())
+            .singleElement()
+            .satisfies(revision -> assertThat(revision.getTargetAmount()).isEqualByComparingTo(exactTarget));
+
+        for (String invalidTarget : Set.of("0.001", "1.005", "100.999", "100.000", "10000000000000000000.00", "not-a-number")) {
+            ObjectNode invalid = objectMapper.valueToTree(command("invalid-target-" + invalidTarget, Set.of(), Set.of(), Set.of()));
+            ((ObjectNode) invalid.path("initialRevision")).put("targetAmount", invalidTarget);
+            restBudgetMockMvc
+                .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(invalid)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+        }
+
+        ObjectNode invalidRevision = objectMapper.valueToTree(revisionSchedule(version, "invalid-revision", TEST_TODAY.plusMonths(1)));
+        ((ObjectNode) invalidRevision.path("revision")).put("targetAmount", "1.005");
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/{id}/revisions", budgetId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(invalidRevision))
+            )
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_PAYLOAD"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(budgetRepository.findById(budgetId).orElseThrow().getRevisions())
+            .singleElement()
+            .satisfies(revision -> {
+                assertThat(revision.getTargetAmount()).isEqualByComparingTo(exactTarget);
+            });
+        assertThat(budgetRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @Transactional
+    void preservesTrailingZeroScaleForAnExactTextualTarget() throws Exception {
+        ObjectNode creation = objectMapper.valueToTree(command("exact-trailing-zero-target", Set.of(), Set.of(), Set.of()));
+        ((ObjectNode) creation.path("initialRevision")).put("targetAmount", "100.50");
+
+        String created = restBudgetMockMvc
+            .perform(post("/api/budgets").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(creation)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.initialRevision.targetAmount").value("100.50"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+        long budgetId = objectMapper.readTree(created).path("id").asLong();
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(budgetRepository.findById(budgetId).orElseThrow().getRevisions())
+            .singleElement()
+            .satisfies(revision -> assertThat(revision.getTargetAmount()).isEqualByComparingTo("100.50"));
     }
 
     @Test
@@ -524,7 +601,7 @@ class BudgetResourceIT {
         restBudgetMockMvc
             .perform(get("/api/budgets/{id}/effective-revision", budgetId).param("periodStart", anchor.plusMonths(1).toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.targetAmount").value(2500.00));
+            .andExpect(jsonPath("$.targetAmount").value("2500.00"));
 
         restBudgetMockMvc
             .perform(get("/api/budgets/{id}/history", budgetId))
@@ -826,11 +903,11 @@ class BudgetResourceIT {
         restBudgetMockMvc
             .perform(get("/api/budgets/{id}/effective-revision", budgetId).param("periodStart", TEST_TODAY.toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.targetAmount").value(2500.00));
+            .andExpect(jsonPath("$.targetAmount").value("2500.00"));
         restBudgetMockMvc
             .perform(get("/api/budgets/{id}/effective-revision", budgetId).param("periodStart", TEST_TODAY.plusMonths(1).toString()))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.targetAmount").value(2600.00));
+            .andExpect(jsonPath("$.targetAmount").value("2600.00"));
         restBudgetMockMvc
             .perform(get("/api/budgets/{id}/history", budgetId))
             .andExpect(status().isOk())

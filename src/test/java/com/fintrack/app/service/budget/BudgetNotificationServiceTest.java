@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fintrack.app.domain.Budget;
@@ -94,5 +95,18 @@ class BudgetNotificationServiceTest {
         assertThat(service.markAllRead()).isEqualTo(2);
 
         verify(notificationRepository).markAllExistingUnreadAsRead("owner", NOW, NOW);
+    }
+
+    @Test
+    void keeps_the_rest_of_the_owner_page_readable_when_one_historical_snapshot_is_corrupt() throws Exception {
+        ReflectionTestUtils.setField(notification, "snapshotJson", "not-json");
+        when(notificationRepository.findAllByUserLoginOrderByEventAtDescIdDesc(eq("owner"), any())).thenReturn(
+            new PageImpl<>(List.of(notification))
+        );
+        when(objectMapper.readTree("not-json")).thenThrow(new JsonProcessingException("corrupt notification snapshot") {});
+
+        BudgetNotificationPage page = service.list(0, 20, false);
+
+        assertThat(page.notifications()).singleElement().satisfies(view -> assertThat(view.snapshot().isNull()).isTrue());
     }
 }

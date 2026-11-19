@@ -1,5 +1,6 @@
 package com.fintrack.app.service.budget;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fintrack.app.domain.enumeration.BudgetPeriodOperationalStatus;
 import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
@@ -20,13 +21,13 @@ public record BudgetEvaluationResult(
     LocalDate startInclusive,
     LocalDate endExclusive,
     Long revisionId,
-    BigDecimal targetAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal targetAmount,
     BudgetPeriodOperationalStatus operationalStatus,
     BudgetEvaluationPeriodTiming periodTiming,
     boolean evaluationApplicable,
-    BigDecimal actualAmount,
-    BigDecimal progressPercentage,
-    BigDecimal remainingAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal actualAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal progressPercentage,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal remainingAmount,
     BudgetGoalStatus goalStatus,
     BudgetEvaluationStatus evaluationStatus,
     SemanticResultAvailability semanticAvailability,

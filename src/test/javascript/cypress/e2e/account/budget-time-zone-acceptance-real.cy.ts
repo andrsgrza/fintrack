@@ -17,7 +17,7 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
     periodIndex: number;
     startInclusive: string;
     endExclusive: string;
-    actualAmount: number | string | null;
+    actualAmount: string | null;
     operationalStatus: string;
     evaluationStatus: string;
   };
@@ -233,7 +233,7 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
       createBudget(budgetName, '2026-03-15', 'DAY', 1, 'RECURRING', { accountId: account.id, categoryId: category.id }).then(budget => {
         currentEvaluation(budget.id, utc).then(authoritative => {
           expect(authoritative.startInclusive).to.equal('2026-03-15');
-          expect(authoritative.actualAmount).to.equal(24);
+          expect(authoritative.actualAmount).to.equal('24.00');
           browserTimeZone(newYork);
           cy.intercept('PUT', '/api/account/budget-time-zone').as('unexpectedZoneWrite');
           cy.visit('/account/settings');
@@ -264,14 +264,14 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
       createExpense(account.id, category.id, '2026-03-16', 70, `${fixture}-historical-c`);
       createBudget(budgetName, '2026-03-15', 'DAY', 1, 'RECURRING', { accountId: account.id, categoryId: category.id }).then(budget => {
         periodEvaluation(budget.id, 0).then(before => {
-          expect(before).to.include({ periodIndex: 0, startInclusive: '2026-03-15', endExclusive: '2026-03-16', actualAmount: 50 });
+          expect(before).to.include({ periodIndex: 0, startInclusive: '2026-03-15', endExclusive: '2026-03-16', actualAmount: '50.00' });
         });
         saveThroughSettings(losAngeles).then(firstChange => {
           expect(firstChange.timeZone).to.equal(losAngeles);
           expect(firstChange.effectiveChanges).to.deep.include({ budgetId: budget.id, budgetName, effectivePeriodStart: '2026-03-16' });
         });
         currentEvaluation(budget.id, utc).then(current => {
-          expect(current).to.include({ periodIndex: 0, startInclusive: '2026-03-15', actualAmount: 50 });
+          expect(current).to.include({ periodIndex: 0, startInclusive: '2026-03-15', actualAmount: '50.00' });
         });
         saveThroughSettings(utc).then(secondChange => {
           expect(secondChange.timeZone).to.equal(utc);
@@ -279,7 +279,7 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
         });
         profile().then(current => expect(current.timeZone).to.equal(utc));
         currentEvaluation(budget.id, newYork).then(current => {
-          expect(current).to.include({ periodIndex: 0, startInclusive: '2026-03-15', actualAmount: 50 });
+          expect(current).to.include({ periodIndex: 0, startInclusive: '2026-03-15', actualAmount: '50.00' });
         });
       });
     });
@@ -296,10 +296,15 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
         currentEvaluation(budgetId, losAngeles).then(current => {
           // At 07:00Z, Mexico has crossed 16 March. If the obsolete Los Angeles B assignment remained,
           // its local date would still be 15 March and this would incorrectly resolve period zero.
-          expect(current).to.include({ periodIndex: 1, startInclusive: '2026-03-16', endExclusive: '2026-03-17', actualAmount: 70 });
+          expect(current).to.include({ periodIndex: 1, startInclusive: '2026-03-16', endExclusive: '2026-03-17', actualAmount: '70.00' });
         });
         periodEvaluation(budgetId, 0, newYork).then(historical => {
-          expect(historical).to.include({ periodIndex: 0, startInclusive: '2026-03-15', endExclusive: '2026-03-16', actualAmount: 50 });
+          expect(historical).to.include({
+            periodIndex: 0,
+            startInclusive: '2026-03-15',
+            endExclusive: '2026-03-16',
+            actualAmount: '50.00',
+          });
         });
         cy.visit('/budgets');
         cy.contains(budgetName).should('be.visible');
@@ -307,7 +312,7 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
         cy.get('[data-cy="budgetDetailHeading"]').should('contain.text', budgetName);
         cy.reload();
         currentEvaluation(budgetId, newYork).then(reloaded => {
-          expect(reloaded).to.include({ periodIndex: 1, startInclusive: '2026-03-16', actualAmount: 70 });
+          expect(reloaded).to.include({ periodIndex: 1, startInclusive: '2026-03-16', actualAmount: '70.00' });
         });
       });
     },

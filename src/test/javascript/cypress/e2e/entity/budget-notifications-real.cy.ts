@@ -8,22 +8,16 @@ describe('Budget notification center real acceptance', { retries: 0 }, () => {
     id: number;
     budgetId: number;
     readAt: string | null;
-    snapshot: { budgetName: string; periodStart: string; newlyCrossedPercentages: number[] };
+    snapshot: { budgetName: string; periodStart: string; newlyCrossedPercentages: string[] };
   };
 
   const username = Cypress.env('E2E_USERNAME') ?? 'user';
   const password = Cypress.env('E2E_PASSWORD') ?? 'user';
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const mexicoToday = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Mexico_City',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-    .formatToParts(new Date())
-    .reduce<Record<string, string>>((parts, part) => ({ ...parts, [part.type]: part.value }), {});
-  const referenceDate = `${mexicoToday.year}-${mexicoToday.month}-${mexicoToday.day}`;
-  const periodStart = `${mexicoToday.year}-${mexicoToday.month}-01`;
+  // The isolated Spring environment owns its deterministic E2E clock. Do not
+  // derive financial fixtures from the host browser date, which may differ.
+  const referenceDate = '2026-03-15';
+  const periodStart = '2026-03-01';
   let account: Reference;
   let category: Reference;
   let existingNotificationCount = 0;
@@ -169,7 +163,7 @@ describe('Budget notification center real acceptance', { retries: 0 }, () => {
     cy.then(() => awaitNotifications(existingNotificationCount + 2)).then(notifications => {
       const first = notifications.find(notification => notification.snapshot.budgetName === firstBudgetName);
       expect(first, 'first materialized notification').to.not.equal(undefined);
-      expect(first?.snapshot.newlyCrossedPercentages).to.deep.equal([50, 80, 100]);
+      expect(first?.snapshot.newlyCrossedPercentages).to.deep.equal(['50.0000', '80.0000', '100.0000']);
       expect(notifications.map(notification => notification.snapshot.budgetName)).to.include.members([firstBudgetName, secondBudgetName]);
     });
 
@@ -177,7 +171,7 @@ describe('Budget notification center real acceptance', { retries: 0 }, () => {
     cy.intercept('PATCH', '/api/notifications/*/read').as('readNotification');
     cy.visit('/notifications');
     cy.wait('@notificationHistory').its('response.statusCode').should('eq', 200);
-    cy.contains('article', firstBudgetName).should('contain.text', '50%, 80%, 100%');
+    cy.contains('article', firstBudgetName).should('contain.text', '50.00%, 80.00%, 100.00%');
     cy.contains('article', firstBudgetName)
       .find('button')
       .contains(/Open budget|Abrir presupuesto/)

@@ -247,6 +247,19 @@ class BudgetCommandServiceTest {
     }
 
     @Test
+    void rejectsAnOverPreciseRevisionWithoutAppendingHistoryOrChangingTheCurrentTarget() {
+        assertThatThrownBy(() -> service.scheduleRevision(7L, revisionCommand(3L, "over-precise", false, LocalDate.of(2026, 4, 1), "1.005"))
+        )
+            .isInstanceOf(BudgetCommandException.class)
+            .hasMessageContaining("at most two decimal places");
+
+        assertThat(schedules).hasSize(1);
+        assertThat(budget.getRevisions())
+            .singleElement()
+            .satisfies(revision -> assertThat(revision.getTargetAmount()).isEqualByComparingTo("1000.00"));
+    }
+
+    @Test
     void appliesAnAllowedAmountChangeToTheEntireCurrentPeriodWithoutRemovingFutureHistory() {
         BudgetMutationResult changed = service.scheduleRevision(7L, revisionCommand(3L, "apply-current", true, null, "1700.00"));
 

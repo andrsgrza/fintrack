@@ -409,12 +409,12 @@ class BudgetEvaluationServiceIT {
             .perform(get("/api/budgets/{budgetId}/evaluation/current", budget.getId()).param("timeZone", ZONE))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.periodIndex").value(2))
-            .andExpect(jsonPath("$.actualAmount").value(0))
+            .andExpect(jsonPath("$.actualAmount").value("0"))
             .andExpect(jsonPath("$.evaluationStatus").value("EVALUATED"));
         restBudgetMockMvc
             .perform(get("/api/budgets/{budgetId}/evaluation/period/{periodIndex}", budget.getId(), 0).param("timeZone", ZONE))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.actualAmount").value(12))
+            .andExpect(jsonPath("$.actualAmount").value("12.00"))
             .andExpect(jsonPath("$.periodTiming").value("HISTORICAL"));
         restBudgetMockMvc
             .perform(
@@ -493,14 +493,14 @@ class BudgetEvaluationServiceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.evaluations.length()").value(2))
             .andExpect(jsonPath("$.evaluations[0].revisionId").value(januaryRevision.getId()))
-            .andExpect(jsonPath("$.evaluations[0].targetAmount").value(100.00))
+            .andExpect(jsonPath("$.evaluations[0].targetAmount").value("100.00"))
             .andExpect(jsonPath("$.evaluations[1].revisionId").value(februaryRevision.getId()))
-            .andExpect(jsonPath("$.evaluations[1].targetAmount").value(200.00));
+            .andExpect(jsonPath("$.evaluations[1].targetAmount").value("200.00"));
         restBudgetMockMvc
             .perform(get("/api/budgets/{budgetId}/effective-revision", budget.getId()).param("periodStart", "2026-01-01"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(januaryRevision.getId()))
-            .andExpect(jsonPath("$.targetAmount").value(100.00))
+            .andExpect(jsonPath("$.targetAmount").value("100.00"))
             .andExpect(jsonPath("$.accountIds[0]").value(januaryAccount.getId()))
             .andExpect(jsonPath("$.categoryIds[0]").value(januaryCategory.getId()))
             .andExpect(jsonPath("$.tagIds[0]").value(januaryTag.getId()))
@@ -509,7 +509,7 @@ class BudgetEvaluationServiceIT {
             .perform(get("/api/budgets/{budgetId}/effective-revision", budget.getId()).param("periodStart", "2026-02-01"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(februaryRevision.getId()))
-            .andExpect(jsonPath("$.targetAmount").value(200.00))
+            .andExpect(jsonPath("$.targetAmount").value("200.00"))
             .andExpect(jsonPath("$.accountScopeMode").value("ALL"));
 
         User foreign = user("detail-foreign", "detail-foreign@example.invalid");

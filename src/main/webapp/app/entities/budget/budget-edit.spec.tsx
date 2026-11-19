@@ -60,13 +60,13 @@ const currentEvaluation = {
   periodIndex: 4,
   startInclusive: '2026-05-01',
   endExclusive: '2026-06-01',
-  targetAmount: 500,
+  targetAmount: '500.00',
   operationalStatus: 'ACTIVE' as const,
   periodTiming: 'CURRENT' as const,
   evaluationApplicable: true,
-  actualAmount: 125,
-  progressPercentage: 25,
-  remainingAmount: 375,
+  actualAmount: '125.00',
+  progressPercentage: '25.00',
+  remainingAmount: '375.00',
   goalStatus: 'WITHIN_LIMIT',
   evaluationStatus: 'EVALUATED',
   semanticAvailability: 'COMPLETE',
@@ -78,7 +78,7 @@ const revision = {
   id: 21,
   number: 1,
   recordedAt: '2026-01-01T00:00:00Z',
-  targetAmount: 500,
+  targetAmount: '500.00',
   intervalUnit: 'MONTH' as const,
   intervalCount: 1,
   alignment: 'ANCHORED' as const,
@@ -97,7 +97,7 @@ const revision = {
   tagMatchMode: 'ANY' as const,
 };
 
-const scheduledRevision = { ...revision, id: 22, number: 2, targetAmount: 900 };
+const scheduledRevision = { ...revision, id: 22, number: 2, targetAmount: '900.00' };
 
 const period = (index: number, startInclusive: string, endExclusive: string) => ({
   index,
@@ -180,7 +180,7 @@ describe('BudgetEdit', () => {
     expect(screen.getByText('Expense limit')).toBeTruthy();
     expect(screen.getByText('MXN')).toBeTruthy();
     expect((byCy('budgetEditName') as HTMLInputElement).value).toBe('Food limit');
-    expect((byCy('budgetEditAmount') as HTMLInputElement).value).toBe('500');
+    expect((byCy('budgetEditAmount') as HTMLInputElement).value).toBe('500.00');
     expect(screen.getByText('New revision scope')).toBeTruthy();
     expect(mockRevision).toHaveBeenCalledWith(10, '2026-05-01');
     expect(mockPeriods).toHaveBeenCalledWith(10, expect.objectContaining({ firstIndex: 4, lastIndex: 64 }));
@@ -205,13 +205,28 @@ describe('BudgetEdit', () => {
           applyToCurrentPeriod: true,
           effectivePeriodStart: '2026-05-01',
           revision: expect.objectContaining({
-            targetAmount: 650,
+            targetAmount: '650',
             categoryScopeMode: 'SELECTED',
             categoryIds: [51],
           }),
         }),
       ),
     );
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['0.001', 'The target amount supports at most two decimal places.'],
+    ['1.005', 'The target amount supports at most two decimal places.'],
+    ['100.999', 'The target amount supports at most two decimal places.'],
+  ])('does not schedule a revision for an unsupported target text %s', async (targetAmount, expectedError) => {
+    renderEdit();
+    await screen.findByText('New revision');
+    fireEvent.change(byCy('budgetEditAmount'), { target: { value: targetAmount } });
+    fireEvent.click(byCy('reviewBudgetRevision'));
+
+    expect(await screen.findByText(expectedError)).toBeTruthy();
+    expect(mockSchedule).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 

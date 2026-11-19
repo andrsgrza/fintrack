@@ -12,6 +12,7 @@ jest.mock('app/shared/notifications/notification-center', () => ({
   useNotificationCenter: () => ({ refreshUnreadCount: mockRefreshUnread }),
 }));
 jest.mock('./notification-api', () => ({
+  ...jest.requireActual('./notification-api'),
   getNotifications: jest.fn(),
   markNotificationRead: jest.fn(),
   markAllNotificationsRead: jest.fn(),
@@ -37,10 +38,36 @@ const notification = {
     periodEndExclusive: '2026-04-01',
     timeZone: 'America/Mexico_City',
     eventAt: '2026-03-15T18:00:00Z',
-    newAmount: 850,
-    newProgressPercentage: 85,
-    targetAmount: 1000,
-    newlyCrossedPercentages: [80],
+    newAmount: '850.00',
+    newProgressPercentage: '85.00',
+    targetAmount: '1000.00',
+    newlyCrossedPercentages: ['80.00'],
+  },
+};
+
+const periodCloseNotification = {
+  id: 5,
+  budgetId: 21,
+  notificationType: 'PERIOD_CLOSED',
+  eventAt: '2026-12-01T06:00:00Z',
+  materializedAt: '2026-12-01T06:00:02Z',
+  readAt: null,
+  snapshot: {
+    budgetId: 21,
+    budgetName: 'Cierre supermercado',
+    budgetType: 'EXPENSE' as const,
+    currency: 'MXN',
+    periodStart: '2026-11-01',
+    periodEndExclusive: '2026-12-01',
+    timeZone: 'America/Mexico_City',
+    revisionId: 4,
+    targetAmount: '1000.00',
+    actualAmount: '845.00',
+    progressPercentage: '84.50',
+    evaluationStatus: 'EVALUATED',
+    logicalClosedAt: '2026-12-01T06:00:00Z',
+    capturedAt: '2026-12-01T06:00:02Z',
+    logicalEventKey: 'PERIOD_CLOSED:21:2026-11-01',
   },
 };
 
@@ -88,5 +115,35 @@ describe('NotificationHistory', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Marcar todas como leídas' }));
     await waitFor(() => expect(mockMarkAll).toHaveBeenCalledTimes(1));
     expect(mockGetNotifications).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a period-close notification at its snapshot historical period only after the server confirms the read', async () => {
+    mockGetNotifications.mockResolvedValue({
+      notifications: [periodCloseNotification],
+      page: 0,
+      size: 20,
+      totalElements: 1,
+      totalPages: 1,
+    });
+    mockMarkRead.mockResolvedValue({ ...periodCloseNotification, readAt: '2026-12-02T10:00:00Z' });
+    renderHistory();
+
+    expect(await screen.findByText('Período cerrado')).toBeTruthy();
+    expect(mockMarkRead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir presupuesto' }));
+
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/budgets/21?referenceDate=2026-11-01'));
+    expect(mockMarkRead).toHaveBeenCalledWith(5);
+  });
+
+  it('preserves the notification in view when reading it fails', async () => {
+    mockMarkRead.mockRejectedValue(new Error('network unavailable'));
+    renderHistory();
+
+    await screen.findByText('Comida');
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir presupuesto' }));
+
+    expect(await screen.findByText('No se pudo marcar la notificación como leída. Inténtalo de nuevo.')).toBeTruthy();
+    expect(screen.getByText('Comida')).toBeTruthy();
   });
 });

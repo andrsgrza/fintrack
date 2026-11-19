@@ -231,6 +231,10 @@ describe('Budget overview and creation real acceptance', () => {
     cy.get('[data-cy="budgetCurrency"]').select('MXN');
     cy.get('[data-cy="budgetIntervalCount"]').type('1');
     cy.get('[data-cy="budgetIntervalUnit"]').select('MONTH');
+    // The server's E2E clock is fixed. Make the browser-created calendar explicit too,
+    // rather than deriving its anchor from the host machine's date.
+    cy.get('[data-cy="budgetStartDate"]').clear();
+    cy.get('[data-cy="budgetStartDate"]').type('2026-03-15');
     cy.wait('@calendarPreview').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.include({ intervalCount: 1, intervalUnit: 'MONTH', alignment: 'ANCHORED', recurrenceMode: 'RECURRING' });
@@ -285,14 +289,14 @@ describe('Budget overview and creation real acceptance', () => {
   it('shows the immutable revision for each real period and stops at a finite calendar boundary', () => {
     const fixture = `${suffix}-${Cypress._.uniqueId('detail-revision')}`;
     const budgetName = `Browser detail revision ${fixture}`;
-    const november = '2026-11-15';
+    const march = '2026-03-15';
 
     cy.authenticatedRequest<{ id: number }>({
       method: 'POST',
       url: '/api/financial-transactions',
       body: {
-        transactionDate: '2026-11-10',
-        postingDate: '2026-11-10',
+        transactionDate: '2026-03-10',
+        postingDate: '2026-03-10',
         description: `Budget detail expense ${fixture}`,
         amount: 50,
         flow: 'OUT',
@@ -318,7 +322,7 @@ describe('Budget overview and creation real acceptance', () => {
               intervalCount: 1,
               intervalUnit: 'MONTH',
               alignment: 'ANCHORED',
-              anchorDate: '2026-11-01',
+              anchorDate: '2026-03-01',
               customDayOfMonth: null,
               recurrenceMode: 'RECURRING',
               termination: 'AFTER_N_PERIODS',
@@ -346,13 +350,13 @@ describe('Budget overview and creation real acceptance', () => {
               clientRequestId: `budget-detail-revision-two-${fixture}`,
               timeZone: 'America/Mexico_City',
               applyToCurrentPeriod: false,
-              effectivePeriodStart: '2026-12-01',
+              effectivePeriodStart: '2026-04-01',
               revision: {
                 targetAmount: 200,
                 intervalCount: 1,
                 intervalUnit: 'MONTH',
                 alignment: 'ANCHORED',
-                anchorDate: '2026-11-01',
+                anchorDate: '2026-03-01',
                 customDayOfMonth: null,
                 recurrenceMode: 'RECURRING',
                 termination: 'AFTER_N_PERIODS',
@@ -374,7 +378,7 @@ describe('Budget overview and creation real acceptance', () => {
           });
       })
       .then(budgetId => {
-        cy.visit(`/budgets/${budgetId}?referenceDate=${november}`);
+        cy.visit(`/budgets/${budgetId}?referenceDate=${march}`);
         cy.get('[data-cy="budgetDetailHeading"]').should('contain.text', budgetName);
         cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '100.00');
         cy.get('[data-cy="budgetDetailActual"]').should('contain.text', '50.00');
@@ -382,14 +386,14 @@ describe('Budget overview and creation real acceptance', () => {
         cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', isolatedAccount.name);
 
         cy.get('[data-cy="budgetNextPeriod"]').click();
-        cy.location('search').should('contain', 'referenceDate=2026-12-01');
+        cy.location('search').should('contain', 'referenceDate=2026-04-01');
         cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '200.00');
         cy.get('[data-cy="budgetDetailActual"]').should('have.text', '—');
         cy.contains(/Revision 2|Revisión 2/).should('be.visible');
         cy.get('[data-cy="budgetScopeSummary"]').should('not.contain.text', isolatedAccount.name);
         cy.get('[data-cy="budgetNextPeriod"]').should('be.disabled');
         cy.get('[data-cy="budgetPreviousPeriod"]').click();
-        cy.location('search').should('contain', 'referenceDate=2026-11-01');
+        cy.location('search').should('contain', 'referenceDate=2026-03-01');
         cy.get('[data-cy="budgetDetailTarget"]').should('contain.text', '100.00');
       });
   });
@@ -565,7 +569,7 @@ describe('Budget overview and creation real acceptance', () => {
         cy.wait('@budgetOverview').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
           const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-          expect(item?.evaluation).to.include({ actualAmount: 0, progressPercentage: 0, goalStatus: 'FINISHED_WITHIN_LIMIT' });
+          expect(item?.evaluation).to.include({ actualAmount: '0', progressPercentage: '0.00', goalStatus: 'WITHIN_LIMIT' });
         });
         cy.contains('[data-cy^="budgetCard-"]', budgetName).within(() => {
           cy.get('[data-cy="budgetActual"]').should('contain.text', '0.00');
@@ -579,7 +583,7 @@ describe('Budget overview and creation real acceptance', () => {
         cy.reload();
         cy.wait('@budgetOverview').then(({ response }) => {
           const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-          expect(item?.evaluation).to.include({ actualAmount: 300, progressPercentage: 10, goalStatus: 'FINISHED_WITHIN_LIMIT' });
+          expect(item?.evaluation).to.include({ actualAmount: '300.00', progressPercentage: '10.00', goalStatus: 'WITHIN_LIMIT' });
         });
 
         cy.authenticatedRequest({
@@ -590,7 +594,7 @@ describe('Budget overview and creation real acceptance', () => {
         cy.reload();
         cy.wait('@budgetOverview').then(({ response }) => {
           const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-          expect(item?.evaluation.actualAmount).to.equal(0);
+          expect(item?.evaluation.actualAmount).to.equal('0');
         });
 
         cy.authenticatedRequest({
@@ -602,7 +606,7 @@ describe('Budget overview and creation real acceptance', () => {
         cy.wait('@budgetOverview').then(({ response }) => {
           expect(response?.statusCode).to.equal(200);
           const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-          expect(item?.evaluation).to.include({ actualAmount: 3600, progressPercentage: 120, goalStatus: 'EXCEEDED' });
+          expect(item?.evaluation).to.include({ actualAmount: '3600.00', progressPercentage: '120.00', goalStatus: 'EXCEEDED' });
         });
         cy.contains('[data-cy^="budgetCard-"]', budgetName).within(() => {
           cy.get('[data-cy="budgetActual"]').should('contain.text', '3,600.00');
@@ -703,22 +707,22 @@ describe('Budget overview and creation real acceptance', () => {
     cy.visit(`/budgets?referenceDate=${referenceDate}`);
     cy.wait('@budgetOverview').then(({ response }) => {
       const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-      expect(item?.evaluation).to.include({ actualAmount: 800, progressPercentage: 80, goalStatus: 'GOAL_NOT_MET' });
+      expect(item?.evaluation).to.include({ actualAmount: '800.00', progressPercentage: '80.00', goalStatus: 'GOAL_PENDING' });
     });
     cy.contains('[data-cy^="budgetCard-"]', budgetName).within(() => {
       cy.get('[data-cy="budgetActual"]').should('contain.text', '800.00');
-      cy.contains(/Goal not met|Meta no alcanzada/).should('be.visible');
+      cy.contains(/Goal pending|Meta pendiente/).should('be.visible');
     });
   });
 
   it('navigates recurring periods and applies objective filters through the real overview endpoint', () => {
     const fixture = `${suffix}-${Cypress._.uniqueId('period-navigation')}`;
     const budgetName = `Browser period navigation ${fixture}`;
+    const february = '2026-02-15';
     const march = '2026-03-15';
-    const april = '2026-04-15';
     [
-      { date: march, amount: 100, description: `Budget March ${suffix}` },
-      { date: april, amount: 200, description: `Budget April ${suffix}` },
+      { date: february, amount: 100, description: `Budget February ${suffix}` },
+      { date: march, amount: 200, description: `Budget March ${suffix}` },
     ].forEach(fixture => {
       cy.authenticatedRequest({
         method: 'POST',
@@ -751,7 +755,7 @@ describe('Budget overview and creation real acceptance', () => {
           intervalCount: 1,
           intervalUnit: 'MONTH',
           alignment: 'ANCHORED',
-          anchorDate: '2026-03-01',
+          anchorDate: '2026-02-01',
           customDayOfMonth: null,
           recurrenceMode: 'RECURRING',
           termination: 'NONE',
@@ -770,20 +774,20 @@ describe('Budget overview and creation real acceptance', () => {
       .its('status')
       .should('eq', 201);
 
-    cy.visit(`/budgets?referenceDate=${march}`);
+    cy.visit(`/budgets?referenceDate=${february}`);
     cy.wait('@budgetOverview').then(({ response }) => {
       const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-      expect(item?.evaluation).to.include({ startInclusive: '2026-03-01', endExclusive: '2026-04-01', actualAmount: 100 });
+      expect(item?.evaluation).to.include({ startInclusive: '2026-02-01', endExclusive: '2026-03-01', actualAmount: '100.00' });
     });
     cy.intercept('GET', '/api/budgets/overview*', request => {
-      if (request.query.referenceDate === april) request.alias = 'aprilBudgetOverview';
+      if (request.query.referenceDate === march) request.alias = 'marchBudgetOverview';
     });
     cy.get('[data-cy="budgetReferenceDate"]').clear();
-    cy.get('[data-cy="budgetReferenceDate"]').type(april);
-    cy.wait('@aprilBudgetOverview').then(({ request, response }) => {
-      expect(request.query.referenceDate).to.equal(april);
+    cy.get('[data-cy="budgetReferenceDate"]').type(march);
+    cy.wait('@marchBudgetOverview').then(({ request, response }) => {
+      expect(request.query.referenceDate).to.equal(march);
       const item = response?.body.budgets.find((candidate: { name: string }) => candidate.name === budgetName);
-      expect(item?.evaluation).to.include({ startInclusive: '2026-04-01', endExclusive: '2026-05-01', actualAmount: 200 });
+      expect(item?.evaluation).to.include({ startInclusive: '2026-03-01', endExclusive: '2026-04-01', actualAmount: '200.00' });
     });
     cy.intercept('GET', '/api/budgets/overview*', request => {
       if (request.query.type === 'EXPENSE') request.alias = 'expenseBudgetOverview';
@@ -792,7 +796,7 @@ describe('Budget overview and creation real acceptance', () => {
     cy.wait('@expenseBudgetOverview').then(({ request }) => expect(request.query.type).to.equal('EXPENSE'));
     cy.contains('[data-cy^="budgetCard-"]', budgetName).should('be.visible');
     cy.intercept('GET', '/api/budgets/overview*', request => {
-      if (request.query.referenceDate !== april && request.query.type === 'EXPENSE') request.alias = 'todayBudgetOverview';
+      if (request.query.referenceDate !== march && request.query.type === 'EXPENSE') request.alias = 'todayBudgetOverview';
     });
     cy.get('[data-cy="budgetReferenceToday"]').click();
     cy.wait('@todayBudgetOverview').its('response.statusCode').should('eq', 200);
@@ -801,7 +805,7 @@ describe('Budget overview and creation real acceptance', () => {
   it('edits the current configuration and manages a future immutable revision through the real detail UI', () => {
     const fixture = `${suffix}-${Cypress._.uniqueId('revision-editor')}`;
     const budgetName = `Browser revision editor ${fixture}`;
-    const currentDate = '2026-11-16';
+    const currentDate = '2026-03-15';
     let budgetId: number;
     let futureStart: string;
 
@@ -809,8 +813,8 @@ describe('Budget overview and creation real acceptance', () => {
       method: 'POST',
       url: '/api/financial-transactions',
       body: {
-        transactionDate: '2026-11-10',
-        postingDate: '2026-11-10',
+        transactionDate: '2026-03-10',
+        postingDate: '2026-03-10',
         description: `Budget editor expense ${fixture}`,
         amount: 50,
         flow: 'OUT',
@@ -836,7 +840,7 @@ describe('Budget overview and creation real acceptance', () => {
           intervalCount: 1,
           intervalUnit: 'MONTH',
           alignment: 'ANCHORED',
-          anchorDate: '2026-11-01',
+          anchorDate: '2026-03-01',
           customDayOfMonth: null,
           recurrenceMode: 'RECURRING',
           termination: 'NONE',
@@ -859,7 +863,7 @@ describe('Budget overview and creation real acceptance', () => {
 
     cy.get('[data-cy="editBudget"]').click();
     cy.location('pathname').should('match', /^\/budgets\/\d+\/edit$/);
-    cy.get('[data-cy="budgetEditAmount"]').should('have.value', '100');
+    cy.get('[data-cy="budgetEditAmount"]').should('have.value', '100.00');
     cy.get('[data-cy="budgetEditAmount"]').clear();
     cy.get('[data-cy="budgetEditAmount"]').type('200');
     cy.contains('label', /Current period|Período actual/).click();
@@ -871,7 +875,7 @@ describe('Budget overview and creation real acceptance', () => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.include({ applyToCurrentPeriod: true });
       expect(request.body.revision).to.deep.include({
-        targetAmount: 200,
+        targetAmount: '200',
         accountIds: [isolatedAccount.id],
         categoryIds: [isolatedExpenseRoot.id],
       });
@@ -896,7 +900,7 @@ describe('Budget overview and creation real acceptance', () => {
     cy.wait('@scheduleFutureRevision').then(({ request, response }) => {
       expect(response?.statusCode).to.equal(200);
       expect(request.body).to.include({ applyToCurrentPeriod: false, effectivePeriodStart: futureStart });
-      expect(request.body.revision.targetAmount).to.equal(300);
+      expect(request.body.revision.targetAmount).to.equal('300');
     });
     cy.get('[data-cy^="pendingRevision-"]')
       .should('have.length', 1)
@@ -925,7 +929,7 @@ describe('Budget overview and creation real acceptance', () => {
   it('uses the real lifecycle UI to schedule and cancel a pause, then permanently deletes only the budget aggregate', () => {
     const fixture = `${suffix}-${Cypress._.uniqueId('lifecycle-delete')}`;
     const budgetName = `Browser lifecycle ${fixture}`;
-    const currentDate = '2026-11-16';
+    const currentDate = '2026-03-15';
     let budgetId: number;
     let transactionId: number;
 
@@ -933,8 +937,8 @@ describe('Budget overview and creation real acceptance', () => {
       method: 'POST',
       url: '/api/financial-transactions',
       body: {
-        transactionDate: '2026-11-10',
-        postingDate: '2026-11-10',
+        transactionDate: '2026-03-10',
+        postingDate: '2026-03-10',
         description: `Budget lifecycle expense ${fixture}`,
         amount: 75,
         flow: 'OUT',
@@ -962,7 +966,7 @@ describe('Budget overview and creation real acceptance', () => {
               intervalCount: 1,
               intervalUnit: 'MONTH',
               alignment: 'ANCHORED',
-              anchorDate: '2026-11-01',
+              anchorDate: '2026-03-01',
               customDayOfMonth: null,
               recurrenceMode: 'RECURRING',
               termination: 'NONE',

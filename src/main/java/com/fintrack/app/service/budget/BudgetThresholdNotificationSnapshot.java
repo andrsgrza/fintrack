@@ -1,5 +1,6 @@
 package com.fintrack.app.service.budget;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import java.math.BigDecimal;
@@ -18,12 +19,12 @@ public record BudgetThresholdNotificationSnapshot(
     LocalDate periodEndExclusive,
     String timeZone,
     Instant eventAt,
-    BigDecimal previousAmount,
-    BigDecimal previousProgressPercentage,
-    BigDecimal newAmount,
-    BigDecimal newProgressPercentage,
-    BigDecimal targetAmount,
-    List<BigDecimal> newlyCrossedPercentages,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal previousAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal previousProgressPercentage,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal newAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal newProgressPercentage,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal targetAmount,
+    @JsonSerialize(contentUsing = BudgetDecimalJson.Serializer.class) List<BigDecimal> newlyCrossedPercentages,
     String sourceMutationKey,
     Long effectiveRevisionId
 ) {}

@@ -130,8 +130,7 @@ public class BudgetCreationService {
 
     private BudgetRevisionConfiguration configuration(BudgetInitialRevisionCommand command) {
         require(command != null, "Initial revision configuration is required.");
-        BigDecimal target = command.targetAmount();
-        if (target == null || target.signum() <= 0) throw failure("Target amount must be greater than zero.");
+        BigDecimal target = BudgetTargetAmountValidator.requireValid(command.targetAmount());
         if (command.intervalCount() == null || command.intervalCount() <= 0) throw failure("Interval count must be greater than zero.");
         if (
             command.intervalUnit() == null ||

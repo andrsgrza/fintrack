@@ -1,5 +1,6 @@
 package com.fintrack.app.service.budget;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fintrack.app.domain.enumeration.*;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,7 +23,7 @@ public record BudgetCreated(
         Long id,
         Integer revisionNumber,
         Instant recordedAt,
-        BigDecimal targetAmount,
+        @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal targetAmount,
         Integer intervalCount,
         BudgetIntervalUnit intervalUnit,
         BudgetAlignment alignment,

@@ -6,7 +6,14 @@ import { useAppSelector } from 'app/config/store';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
 import { useNotificationCenter } from 'app/shared/notifications/notification-center';
 import { copy } from 'app/entities/budget/budget-utils';
-import { BudgetNotification, getNotifications, markAllNotificationsRead, markNotificationRead, NotificationPage } from './notification-api';
+import {
+  BudgetNotification,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  notificationPeriodStart,
+  NotificationPage,
+} from './notification-api';
 import { NotificationContent } from './notification-content';
 
 const PAGE_SIZE = 20;
@@ -19,21 +26,21 @@ const NotificationHistory = () => {
   const [pageNumber, setPageNumber] = useState(0);
   const [page, setPage] = useState<NotificationPage | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(false);
+    setError(null);
     try {
       setPage(await getNotifications({ page: pageNumber, size: PAGE_SIZE, unreadOnly }));
       await refreshUnreadCount();
     } catch {
-      setError(true);
+      setError(copy(locale, 'No se pudieron cargar las notificaciones.', 'Notifications could not be loaded.'));
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, refreshUnreadCount, unreadOnly]);
+  }, [locale, pageNumber, refreshUnreadCount, unreadOnly]);
 
   useEffect(() => {
     void load();
@@ -41,12 +48,30 @@ const NotificationHistory = () => {
 
   const openNotification = async (notification: BudgetNotification) => {
     setUpdating(true);
+    setError(null);
     try {
       const updated = await markNotificationRead(notification.id);
       await refreshUnreadCount();
-      navigate(`/budgets/${updated.budgetId}${updated.snapshot?.periodStart ? `?referenceDate=${updated.snapshot.periodStart}` : ''}`);
+      const periodStart = notificationPeriodStart(updated);
+      if (!periodStart) {
+        setError(
+          copy(
+            locale,
+            'La notificación no contiene el período histórico necesario para abrir el presupuesto.',
+            'This notification does not contain the historical period needed to open the budget.',
+          ),
+        );
+        return;
+      }
+      navigate(`/budgets/${updated.budgetId}?referenceDate=${periodStart}`);
     } catch {
-      setError(true);
+      setError(
+        copy(
+          locale,
+          'No se pudo marcar la notificación como leída. Inténtalo de nuevo.',
+          'The notification could not be marked as read. Try again.',
+        ),
+      );
     } finally {
       setUpdating(false);
     }
@@ -54,12 +79,13 @@ const NotificationHistory = () => {
 
   const markAll = async () => {
     setUpdating(true);
+    setError(null);
     try {
       await markAllNotificationsRead();
       await refreshUnreadCount();
       await load();
     } catch {
-      setError(true);
+      setError(copy(locale, 'No se pudieron actualizar las notificaciones.', 'Notifications could not be updated.'));
     } finally {
       setUpdating(false);
     }
@@ -99,7 +125,7 @@ const NotificationHistory = () => {
         {loading ? <p role="status">{copy(locale, 'Cargando notificaciones…', 'Loading notifications…')}</p> : null}
         {error ? (
           <div className="alert alert-danger">
-            <p className="mb-2">{copy(locale, 'No se pudieron cargar las notificaciones.', 'Notifications could not be loaded.')}</p>
+            <p className="mb-2">{error}</p>
             <Button size="sm" onClick={() => void load()}>
               {copy(locale, 'Reintentar', 'Retry')}
             </Button>
@@ -111,14 +137,13 @@ const NotificationHistory = () => {
           </p>
         ) : null}
         {!loading &&
-          !error &&
           page?.notifications.map(notification => (
             <article
               key={notification.id}
               className={`border rounded p-3 mb-2 ${notification.readAt ? '' : 'notification-unread'}`}
               data-cy={`notification-${notification.id}`}
             >
-              <div className="d-flex gap-3 justify-content-between align-items-start">
+              <div className="notification-history-item-body">
                 <NotificationContent notification={notification} locale={locale} />
                 <Button size="sm" color="primary" outline disabled={updating} onClick={() => void openNotification(notification)}>
                   {copy(locale, 'Abrir presupuesto', 'Open budget')}

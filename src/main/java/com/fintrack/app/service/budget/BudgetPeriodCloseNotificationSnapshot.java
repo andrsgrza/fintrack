@@ -1,5 +1,6 @@
 package com.fintrack.app.service.budget;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import java.math.BigDecimal;
@@ -16,9 +17,9 @@ public record BudgetPeriodCloseNotificationSnapshot(
     LocalDate periodEndExclusive,
     String timeZone,
     Long revisionId,
-    BigDecimal targetAmount,
-    BigDecimal actualAmount,
-    BigDecimal progressPercentage,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal targetAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal actualAmount,
+    @JsonSerialize(using = BudgetDecimalJson.Serializer.class) BigDecimal progressPercentage,
     BudgetEvaluationStatus evaluationStatus,
     Instant logicalClosedAt,
     Instant capturedAt,

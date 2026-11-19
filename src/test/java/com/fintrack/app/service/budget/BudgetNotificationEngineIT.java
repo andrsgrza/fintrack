@@ -87,6 +87,9 @@ class BudgetNotificationEngineIT {
     private BudgetThresholdNotificationService thresholdService;
 
     @Autowired
+    private BudgetNotificationPreferenceService notificationPreferenceService;
+
+    @Autowired
     private BudgetNotificationOutboxWorker outboxWorker;
 
     @Autowired
@@ -203,6 +206,35 @@ class BudgetNotificationEngineIT {
                 BudgetNotificationOutboxState.MATERIALIZED
             );
         });
+    }
+
+    @Test
+    @WithMockUser(username = OWNER)
+    void captures_threshold_crossings_independently_for_two_matching_budgets() {
+        User owner = owner();
+        owner.setTimeZone("America/Mexico_City");
+        FinancialAccount account = account(owner);
+        Category category = category(owner);
+        Budget first = scopedBudget(owner, "notification-two-budgets-first", account, category);
+        Budget second = scopedBudget(owner, "notification-two-budgets-second", account, category);
+        timeZoneService.recordInitial(first, "America/Mexico_City", LocalDate.of(2026, 3, 1), NOW);
+        timeZoneService.recordInitial(second, "America/Mexico_City", LocalDate.of(2026, 3, 1), NOW);
+        Set<BigDecimal> thresholds = Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000"), new BigDecimal("100.0000"));
+        BudgetNotificationPreferenceUpdateCommand preferences = new BudgetNotificationPreferenceUpdateCommand(
+            null,
+            true,
+            thresholds,
+            false
+        );
+        notificationPreferenceService.update(first.getId(), preferences);
+        notificationPreferenceService.update(second.getId(), preferences);
+
+        financialTransactionService.save(transactionDto(account, category, "100.00"));
+
+        assertThat(claimRepository.countByBudgetId(first.getId())).isEqualTo(3);
+        assertThat(claimRepository.countByBudgetId(second.getId())).isEqualTo(3);
+        assertThat(outboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(first.getId()))).hasSize(1);
+        assertThat(outboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(second.getId()))).hasSize(1);
     }
 
     @Test
@@ -680,6 +712,41 @@ class BudgetNotificationEngineIT {
         fixtureBudgetIds.add(saved.getId());
         scheduleRepository.saveAndFlush(
             BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), anchorDate, 1, "INITIAL", NOW)
+        );
+        return saved;
+    }
+
+    private Budget scopedBudget(User owner, String creationRequestId, FinancialAccount account, Category category) {
+        BudgetRevisionConfiguration configuration = new BudgetRevisionConfiguration(
+            new BigDecimal("100.00"),
+            1,
+            BudgetIntervalUnit.MONTH,
+            BudgetAlignment.ANCHORED,
+            LocalDate.of(2026, 3, 1),
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null,
+            BudgetAccountScopeMode.SELECTED,
+            BudgetCategoryScopeMode.SELECTED,
+            BudgetTagScopeMode.NONE,
+            BudgetTagMatchMode.ANY
+        );
+        Budget budget = Budget.create(
+            owner,
+            "Scoped notification budget",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            creationRequestId,
+            "hash",
+            NOW
+        );
+        budget.addInitialRevision(BudgetRevision.initial(configuration, Set.of(account), Set.of(category), Set.of(), NOW));
+        Budget saved = budgetRepository.saveAndFlush(budget);
+        fixtureBudgetIds.add(saved.getId());
+        scheduleRepository.saveAndFlush(
+            BudgetRevisionSchedule.scheduled(saved, saved.getRevisions().get(0), LocalDate.of(2026, 3, 1), 1, "INITIAL", NOW)
         );
         return saved;
     }

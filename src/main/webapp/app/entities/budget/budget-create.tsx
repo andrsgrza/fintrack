@@ -21,6 +21,7 @@ import {
 } from './budget-notification-preferences';
 import {
   browserTimeZone,
+  budgetTargetValidationError,
   browserToday,
   calendarValidationError,
   copy,
@@ -531,8 +532,8 @@ const BudgetCreate = () => {
 
   const validate = () => {
     if (!name.trim()) return copy(locale, 'Escribe un nombre para el presupuesto.', 'Enter a budget name.');
-    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0)
-      return copy(locale, 'Escribe un importe objetivo mayor que cero.', 'Enter a target amount greater than zero.');
+    const targetError = budgetTargetValidationError(amount, locale);
+    if (targetError) return targetError;
     if (!currency) return copy(locale, 'Selecciona una moneda para continuar.', 'Select a currency to continue.');
     if (!calendarReady || previewError || !preview?.periods.length) {
       return copy(
@@ -569,7 +570,7 @@ const BudgetCreate = () => {
         clientRequestId: requestId.current,
         timeZone,
         initialRevision: {
-          targetAmount: Number(amount),
+          targetAmount: amount,
           intervalCount: numericInterval,
           intervalUnit,
           alignment,
@@ -708,9 +709,7 @@ const BudgetCreate = () => {
                 </Label>
                 <Input
                   id="budget-amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                  type="text"
                   inputMode="decimal"
                   value={amount}
                   onChange={event => setAmount(event.target.value)}
@@ -1147,7 +1146,7 @@ const BudgetCreate = () => {
               </div>
               <div className="col-12 col-md-6">
                 <strong>{copy(locale, 'Importe', 'Amount')}:</strong>{' '}
-                {amount && currency ? formatBudgetAmount(Number(amount), currency, locale) : '—'}
+                {amount && currency ? formatBudgetAmount(amount, currency, locale) : '—'}
               </div>
               <div className="col-12 col-md-6">
                 <strong>{copy(locale, 'Primer período', 'First period')}:</strong>{' '}

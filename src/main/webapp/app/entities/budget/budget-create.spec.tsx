@@ -78,7 +78,7 @@ describe('BudgetCreate', () => {
         type: 'EXPENSE',
         currency: 'MXN',
         initialRevision: expect.objectContaining({
-          targetAmount: 1250,
+          targetAmount: '1250',
           intervalCount: 1,
           intervalUnit: 'MONTH',
           accountScopeMode: 'ALL',
@@ -216,6 +216,36 @@ describe('BudgetCreate', () => {
     expect(mockCreateBudget).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['0.001', 'The target amount supports at most two decimal places.'],
+    ['1.005', 'The target amount supports at most two decimal places.'],
+    ['100.999', 'The target amount supports at most two decimal places.'],
+    ['100.000', 'The target amount supports at most two decimal places.'],
+    ['0', 'Enter a target amount greater than zero.'],
+    ['99999999999999999999.99', 'The target amount exceeds the supported precision.'],
+  ])('rejects unsupported target text %s before it can be serialized', async (targetAmount, expectedError) => {
+    renderCreate();
+    await fillRequiredFields();
+    fireEvent.change(screen.getByLabelText('Period limit'), { target: { value: targetAmount } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create budget' }));
+
+    expect(await screen.findByText(expectedError)).toBeTruthy();
+    expect(mockCreateBudget).not.toHaveBeenCalled();
+  });
+
+  it('sends a large exact decimal target as text without Number coercion', async () => {
+    const amount = '9999999999999999999.99';
+    mockCreateBudget.mockResolvedValue({ id: 48, name: 'Monthly essentials', type: 'EXPENSE', currency: 'MXN' });
+    renderCreate();
+    await fillRequiredFields();
+    fireEvent.change(screen.getByLabelText('Period limit'), { target: { value: amount } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create budget' }));
+
+    await waitFor(() => expect(mockCreateBudget).toHaveBeenCalledTimes(1));
+    expect(mockCreateBudget.mock.calls[0][0].initialRevision.targetAmount).toBe(amount);
+  });
+
   it('does not activate notification suggestions by default and includes explicitly enabled preferences in creation', async () => {
     mockCreateBudget.mockResolvedValue({ id: 47, name: 'Monthly essentials', type: 'EXPENSE', currency: 'MXN' });
     renderCreate();
@@ -277,5 +307,8 @@ describe('BudgetCreate', () => {
         'fallback',
       ),
     ).toBe('El primer ciclo debe comenzar en el límite configurado.');
+    expect(calendarValidationError(new Error('Target amount supports at most two decimal places.'), 'es', 'fallback')).toBe(
+      'El importe objetivo admite como máximo dos decimales.',
+    );
   });
 });

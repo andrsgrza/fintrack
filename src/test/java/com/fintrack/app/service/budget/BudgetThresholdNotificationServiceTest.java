@@ -101,7 +101,7 @@ class BudgetThresholdNotificationServiceTest {
         var json = new ObjectMapper().findAndRegisterModules().readTree(outbox.getValue().getSnapshotJson());
         assertThat(json.path("budgetName").asText()).isEqualTo("Food");
         assertThat(json.path("newlyCrossedPercentages")).hasSize(1);
-        assertThat(json.path("newlyCrossedPercentages").get(0).decimalValue()).isEqualByComparingTo("50.0000");
+        assertThat(json.path("newlyCrossedPercentages").get(0).textValue()).isEqualTo("50.0000");
         verify(entityManager).flush();
     }
 

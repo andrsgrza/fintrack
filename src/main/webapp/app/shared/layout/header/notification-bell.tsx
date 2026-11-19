@@ -8,6 +8,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   BudgetNotification,
+  notificationPeriodStart,
 } from 'app/entities/notifications/notification-api';
 import { NotificationContent } from 'app/entities/notifications/notification-content';
 import { useNotificationCenter } from 'app/shared/notifications/notification-center';
@@ -23,17 +24,17 @@ const NotificationBell = () => {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<BudgetNotification[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
   const loadPreview = async () => {
     setLoading(true);
-    setError(false);
+    setError(null);
     try {
       const page = await getNotifications({ page: 0, size: PREVIEW_SIZE });
       setNotifications(page.notifications);
     } catch {
-      setError(true);
+      setError(copy(locale, 'No se pudieron cargar las notificaciones.', 'Notifications could not be loaded.'));
     } finally {
       setLoading(false);
     }
@@ -48,15 +49,32 @@ const NotificationBell = () => {
 
   const openNotification = async (notification: BudgetNotification) => {
     setUpdating(true);
+    setError(null);
     try {
       const updated = await markNotificationRead(notification.id);
       setNotifications(items => items.map(item => (item.id === updated.id ? updated : item)));
       await refreshUnreadCount();
-      const date = updated.snapshot?.periodStart;
-      navigate(`/budgets/${updated.budgetId}${date ? `?referenceDate=${date}` : ''}`);
+      const periodStart = notificationPeriodStart(updated);
+      if (!periodStart) {
+        setError(
+          copy(
+            locale,
+            'La notificación no contiene el período histórico necesario para abrir el presupuesto.',
+            'This notification does not contain the historical period needed to open the budget.',
+          ),
+        );
+        return;
+      }
+      navigate(`/budgets/${updated.budgetId}?referenceDate=${periodStart}`);
       setOpen(false);
     } catch {
-      setError(true);
+      setError(
+        copy(
+          locale,
+          'No se pudo marcar la notificación como leída. Inténtalo de nuevo.',
+          'The notification could not be marked as read. Try again.',
+        ),
+      );
     } finally {
       setUpdating(false);
     }
@@ -64,12 +82,13 @@ const NotificationBell = () => {
 
   const markAll = async () => {
     setUpdating(true);
+    setError(null);
     try {
       await markAllNotificationsRead();
       await refreshUnreadCount();
       await loadPreview();
     } catch {
-      setError(true);
+      setError(copy(locale, 'No se pudieron actualizar las notificaciones.', 'Notifications could not be updated.'));
     } finally {
       setUpdating(false);
     }
@@ -111,7 +130,10 @@ const NotificationBell = () => {
         ) : null}
         {error ? (
           <div className="p-3 small text-danger">
-            {copy(locale, 'No se pudieron cargar las notificaciones.', 'Notifications could not be loaded.')}
+            <div>{error}</div>
+            <button className="btn btn-link btn-sm p-0 mt-1" type="button" onClick={() => void loadPreview()}>
+              {copy(locale, 'Reintentar', 'Retry')}
+            </button>
           </div>
         ) : null}
         {!loading && !error && notifications.length === 0 ? (

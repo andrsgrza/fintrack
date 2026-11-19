@@ -44,7 +44,7 @@ Period-close settings are persisted now but deliberately have no scheduler in th
 
 ## Timezone authority
 
-At Budget creation, an explicitly supplied valid IANA zone initializes both the user profile when blank and a Budget timezone assignment at the Budget anchor. The notification engine evaluates a Budget only with its effective persisted assignment.
+> **Superseded timezone note.** The original BUDGET-6A creation design described initializing a blank profile timezone from a supplied browser zone. The approved current contract is in [BUDGET-6C-B](BUDGET-6C-B.md): browser detection is only a suggestion, and a profile timezone is persisted only after explicit user confirmation. Budget creation records the Budget-effective assignment from its validated command; it never silently overwrites the profile preference. The notification engine evaluates a Budget only with its effective persisted assignment.
 
 A missing, malformed, or unavailable assignment means that optional alerts for that Budget are skipped; the engine does not guess a timezone. `BudgetTimeZoneService.scheduleProfileTimeZoneChange` is the backend foundation for a future profile flow: it records a new assignment at each Budget's next period boundary, never in the active period, and retains historical boundaries unchanged.
 

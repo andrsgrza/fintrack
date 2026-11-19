@@ -27,13 +27,13 @@ const activeZeroBudget = {
     periodIndex: 0,
     startInclusive: '2026-11-01',
     endExclusive: '2026-12-01',
-    targetAmount: 1000,
+    targetAmount: '1000.00',
     operationalStatus: 'ACTIVE' as const,
     periodTiming: 'CURRENT' as const,
     evaluationApplicable: true,
-    actualAmount: 0,
-    progressPercentage: 0,
-    remainingAmount: 1000,
+    actualAmount: '0.00',
+    progressPercentage: '0.00',
+    remainingAmount: '1000.00',
     goalStatus: 'WITHIN_LIMIT',
     evaluationStatus: 'EVALUATED',
     semanticAvailability: 'AVAILABLE',
@@ -117,9 +117,9 @@ describe('BudgetOverview', () => {
         ...activeZeroBudget.evaluation,
         budgetId: 12,
         budgetName: 'Exceeded food',
-        actualAmount: 3600,
-        progressPercentage: 120,
-        remainingAmount: -600,
+        actualAmount: '3600.00',
+        progressPercentage: '120.00',
+        remainingAmount: '-600.00',
         goalStatus: 'EXCEEDED',
       },
     };
@@ -166,4 +166,51 @@ describe('BudgetOverview', () => {
     expect(screen.getByText('No financial evaluation')).toBeTruthy();
     expect(document.querySelector('[data-cy="budgetCard-10"] [data-cy="budgetActual"]')?.textContent).toMatch(/0\.00/);
   });
+
+  it.each([
+    ['0.00', '0.00%', '0', 'EXPENSE'],
+    ['50.00', '50.00%', '50', 'EXPENSE'],
+    ['100.00', '100.00%', '100', 'EXPENSE'],
+    ['120.00', '120.00%', '100', 'EXPENSE'],
+    ['250.00', '250.00%', '100', 'INCOME'],
+  ])(
+    'keeps %s actual progress visible while exposing a valid ARIA range for %s budgets',
+    async (progress, visibleProgress, boundedProgress, type) => {
+      const budgetId = 20;
+      mockGetBudgetOverview.mockResolvedValue({
+        referenceDate: '2026-11-15',
+        timeZone: 'America/Mexico_City',
+        budgets: [
+          {
+            ...activeZeroBudget,
+            budgetId,
+            name: `${type} ${progress}`,
+            type,
+            evaluation: {
+              ...activeZeroBudget.evaluation,
+              budgetId,
+              budgetName: `${type} ${progress}`,
+              budgetType: type,
+              progressPercentage: progress,
+              actualAmount: type === 'EXPENSE' ? '1250.00' : '2500.00',
+              remainingAmount: progress === '0.00' ? '1000.00' : progress === '250.00' ? '1500.00' : '-250.00',
+            },
+          },
+        ],
+      });
+
+      renderOverview();
+      await screen.findByText(`${type} ${progress}`);
+      const progressbar = document.querySelector('[data-cy="budgetProgress"]');
+      expect(progressbar.getAttribute('aria-valuemin')).toBe('0');
+      expect(progressbar.getAttribute('aria-valuemax')).toBe('100');
+      expect(progressbar.getAttribute('aria-valuenow')).toBe(boundedProgress);
+      expect(progressbar.getAttribute('aria-valuetext')).toBe(visibleProgress);
+      expect(progressbar.textContent).not.toContain(visibleProgress);
+      expect(document.querySelector(`[data-cy="budgetCard-${budgetId}"]`)?.textContent).toContain(visibleProgress);
+      expect(document.querySelector(`[data-cy="budgetCard-${budgetId}"]`)?.textContent).toContain(
+        type === 'EXPENSE' ? 'Spent' : 'Received',
+      );
+    },
+  );
 });
