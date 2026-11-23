@@ -89,7 +89,10 @@ public class BudgetNotificationPreference implements Serializable {
             this.periodCloseEnabledSince = null;
         }
         this.periodCloseEnabled = periodCloseEnabled;
-        this.updatedAt = now;
+        // A full replacement is a new configuration revision even when a deterministic test clock has not moved.
+        // Keep the audit instant strictly monotonic, which also marks the owning entity dirty and advances @Version
+        // when the only material changes are threshold child rows.
+        this.updatedAt = now.isAfter(this.updatedAt) ? now : this.updatedAt.plusNanos(1);
         // Keep unchanged child rows. Clearing and recreating all rows makes Hibernate insert a value such as 50%
         // before its orphan removal DELETE is flushed, which violates the per-preference uniqueness constraint.
         Set<BigDecimal> requested = new HashSet<>(normalizedThresholds);

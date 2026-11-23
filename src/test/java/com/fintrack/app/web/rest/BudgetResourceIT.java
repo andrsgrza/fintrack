@@ -267,7 +267,7 @@ class BudgetResourceIT {
 
         // Replacing preferences must preserve unchanged child threshold rows. PostgreSQL enforces their unique
         // constraint, so this detects an insert-before-orphan-delete regression in the real persistence layer.
-        restBudgetMockMvc
+        String replacedPreference = restBudgetMockMvc
             .perform(
                 put("/api/budgets/{id}/notification-preferences", budget.getId())
                     .contentType(MediaType.APPLICATION_JSON)
@@ -284,7 +284,12 @@ class BudgetResourceIT {
             )
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.thresholdPercentages.length()").value(2))
-            .andExpect(jsonPath("$.periodCloseEnabledSince").doesNotExist());
+            .andExpect(jsonPath("$.periodCloseEnabledSince").doesNotExist())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        long replacedVersion = objectMapper.readTree(replacedPreference).path("version").asLong();
+        assertThat(replacedVersion).isGreaterThan(version);
 
         // The public preference contract transports thresholds as exact JSON strings. Existing numeric clients are
         // still accepted by the command deserializer, but the current UI must never round-trip through a double.
@@ -295,7 +300,7 @@ class BudgetResourceIT {
                     .content(
                         """
                         {"expectedVersion":%d,"percentageAlertsEnabled":true,"thresholdPercentages":["87.1250"],"periodCloseEnabled":true}
-                        """.formatted(version)
+                        """.formatted(replacedVersion)
                     )
             )
             .andExpect(status().isOk())

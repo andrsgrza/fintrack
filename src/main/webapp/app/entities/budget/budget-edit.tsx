@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Input, Label } from 'reactstrap';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -31,6 +31,7 @@ import {
   updateBudgetMetadata,
 } from './budget-api';
 import { BudgetScopeSection, ScopeMode, TagScopeMode, categoryCompatible } from './budget-create';
+import { BudgetNotificationPreferencesSection } from './budget-detail-notification-preferences';
 import {
   browserTimeZone,
   budgetTargetValidationError,
@@ -83,6 +84,7 @@ const scheduleTitle = (schedule: BudgetRevisionSchedule, revision: BudgetRevisio
 const BudgetEdit = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const { budgetId: rawBudgetId } = useParams();
+  const location = useLocation();
   const budgetId = Number(rawBudgetId);
   const timeZone = useMemo(browserTimeZone, []);
   const requestId = useRef(newRequestId());
@@ -100,6 +102,7 @@ const BudgetEdit = () => {
   const [tags, setTags] = useState<ITagSelectable[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [metadataBaseline, setMetadataBaseline] = useState({ name: '', description: '' });
   const [amount, setAmount] = useState('');
   const [accountScope, setAccountScope] = useState<ScopeMode>('ALL');
   const [accountIds, setAccountIds] = useState<number[]>([]);
@@ -118,78 +121,90 @@ const BudgetEdit = () => {
   const [savingRevision, setSavingRevision] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [notificationDirty, setNotificationDirty] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!Number.isSafeInteger(budgetId) || budgetId <= 0) {
-      setError(copy(locale, 'El presupuesto no es válido.', 'The budget is not valid.'));
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      let nextHistory: BudgetHistory | null = null;
-      let nextEvaluation: BudgetEvaluation | null = null;
-      try {
-        nextEvaluation = await getBudgetCurrentEvaluation(budgetId);
-      } catch {
-        // A future or completed calendar can have no current period. Its first durable scheduled boundary is the
-        // server-owned fallback for loading immutable editing context.
-      }
-      nextHistory = await getBudgetHistory(budgetId);
-      const initialSchedule = nextHistory.schedules.find(schedule => schedule.active);
-      const overviewReferenceDate = nextEvaluation?.startInclusive ?? initialSchedule?.effectivePeriodStart;
-      if (!overviewReferenceDate) throw new Error('No Budget period is available.');
-      const overview = await getBudgetOverview({ referenceDate: overviewReferenceDate });
-      const nextItem = overview.budgets.find(candidate => candidate.budgetId === budgetId) ?? null;
-      if (!nextItem) {
-        setItem(null);
-        setError(
-          copy(locale, 'No existe o no tienes acceso a este presupuesto.', 'It does not exist or you do not have access to this budget.'),
-        );
+  const load = useCallback(
+    async (options: { resetMetadataDraft?: boolean; resetRevisionDraft?: boolean; blocking?: boolean } = {}) => {
+      const { resetMetadataDraft = true, resetRevisionDraft = true, blocking = true } = options;
+      if (!Number.isSafeInteger(budgetId) || budgetId <= 0) {
+        setError(copy(locale, 'El presupuesto no es válido.', 'The budget is not valid.'));
+        setLoading(false);
         return;
       }
-      setItem(nextItem);
-      setName(nextItem.name);
-      setDescription(nextItem.description ?? '');
-      if (!nextEvaluation) {
-        const firstRevision = nextHistory.revisions[0];
-        if (nextItem.operationalStatus !== 'SCHEDULED' || !firstRevision) throw new Error('No current Budget period is available.');
-        // A not-yet-started budget has no current period.  The API resolves its first scheduled period only to
-        // display its immutable configuration; mutation stays unavailable until the server has a current period.
-        nextEvaluation = await getBudgetEvaluationAtDate(budgetId, firstRevision.anchorDate);
+      if (blocking) setLoading(true);
+      setError(null);
+      try {
+        let nextHistory: BudgetHistory | null = null;
+        let nextEvaluation: BudgetEvaluation | null = null;
+        try {
+          nextEvaluation = await getBudgetCurrentEvaluation(budgetId);
+        } catch {
+          // A future or completed calendar can have no current period. Its first durable scheduled boundary is the
+          // server-owned fallback for loading immutable editing context.
+        }
+        nextHistory = await getBudgetHistory(budgetId);
+        const initialSchedule = nextHistory.schedules.find(schedule => schedule.active);
+        const overviewReferenceDate = nextEvaluation?.startInclusive ?? initialSchedule?.effectivePeriodStart;
+        if (!overviewReferenceDate) throw new Error('No Budget period is available.');
+        const overview = await getBudgetOverview({ referenceDate: overviewReferenceDate });
+        const nextItem = overview.budgets.find(candidate => candidate.budgetId === budgetId) ?? null;
+        if (!nextItem) {
+          setItem(null);
+          setError(
+            copy(locale, 'No existe o no tienes acceso a este presupuesto.', 'It does not exist or you do not have access to this budget.'),
+          );
+          return;
+        }
+        setItem(nextItem);
+        if (resetMetadataDraft) {
+          const nextMetadata = { name: nextItem.name, description: nextItem.description ?? '' };
+          setName(nextMetadata.name);
+          setDescription(nextMetadata.description);
+          setMetadataBaseline(nextMetadata);
+        }
+        if (!nextEvaluation) {
+          const firstRevision = nextHistory.revisions[0];
+          if (nextItem.operationalStatus !== 'SCHEDULED' || !firstRevision) throw new Error('No current Budget period is available.');
+          // A not-yet-started budget has no current period.  The API resolves its first scheduled period only to
+          // display its immutable configuration; mutation stays unavailable until the server has a current period.
+          nextEvaluation = await getBudgetEvaluationAtDate(budgetId, firstRevision.anchorDate);
+        }
+        const [nextRevision, nextPeriods] = await Promise.all([
+          getBudgetEffectiveRevision(budgetId, nextEvaluation.startInclusive),
+          getBudgetOperationalPeriods(budgetId, {
+            firstIndex: nextEvaluation.periodIndex,
+            lastIndex: nextEvaluation.periodIndex + 60,
+          }),
+        ]);
+        setHistory(nextHistory);
+        setCurrentEvaluation(nextEvaluation);
+        setCurrentRevision(nextRevision);
+        setPeriods(nextPeriods);
+        if (resetRevisionDraft) {
+          setAmount(nextRevision.targetAmount);
+          setAccountScope(nextRevision.accountScopeMode);
+          setAccountIds(nextRevision.accountIds);
+          setCategoryScope(nextRevision.categoryScopeMode);
+          setCategoryIds(nextRevision.categoryIds);
+          setTagScope(nextRevision.tagScopeMode);
+          setTagIds(nextRevision.tagIds);
+          setTagMatchMode(nextRevision.tagMatchMode);
+          const firstFuture = nextPeriods.find(period => period.index === nextEvaluation.periodIndex + 1 && period.status !== 'COMPLETED');
+          setFutureStart(firstFuture?.startInclusive ?? '');
+          setEffectiveChoice('NEXT');
+          setReviewing(false);
+        }
+        setPendingCancellation(null);
+      } catch (problem) {
+        setError(
+          userFacingError(problem, copy(locale, 'No se pudo cargar la edición del presupuesto.', 'The budget editor could not be loaded.')),
+        );
+      } finally {
+        if (blocking) setLoading(false);
       }
-      const [nextRevision, nextPeriods] = await Promise.all([
-        getBudgetEffectiveRevision(budgetId, nextEvaluation.startInclusive),
-        getBudgetOperationalPeriods(budgetId, {
-          firstIndex: nextEvaluation.periodIndex,
-          lastIndex: nextEvaluation.periodIndex + 60,
-        }),
-      ]);
-      setHistory(nextHistory);
-      setCurrentEvaluation(nextEvaluation);
-      setCurrentRevision(nextRevision);
-      setPeriods(nextPeriods);
-      setAmount(nextRevision.targetAmount);
-      setAccountScope(nextRevision.accountScopeMode);
-      setAccountIds(nextRevision.accountIds);
-      setCategoryScope(nextRevision.categoryScopeMode);
-      setCategoryIds(nextRevision.categoryIds);
-      setTagScope(nextRevision.tagScopeMode);
-      setTagIds(nextRevision.tagIds);
-      setTagMatchMode(nextRevision.tagMatchMode);
-      const firstFuture = nextPeriods.find(period => period.index === nextEvaluation.periodIndex + 1 && period.status !== 'COMPLETED');
-      setFutureStart(firstFuture?.startInclusive ?? '');
-      setReviewing(false);
-      setPendingCancellation(null);
-    } catch (problem) {
-      setError(
-        userFacingError(problem, copy(locale, 'No se pudo cargar la edición del presupuesto.', 'The budget editor could not be loaded.')),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [budgetId, locale, timeZone]);
+    },
+    [budgetId, locale, timeZone],
+  );
 
   useEffect(() => {
     void load();
@@ -245,6 +260,53 @@ const BudgetEdit = () => {
   );
   const completed = item?.operationalStatus === 'COMPLETED';
   const scheduled = item?.operationalStatus === 'SCHEDULED';
+  const metadataDirty = name !== metadataBaseline.name || description !== metadataBaseline.description;
+  const revisionDirty =
+    !!currentRevision &&
+    (amount !== currentRevision.targetAmount ||
+      accountScope !== currentRevision.accountScopeMode ||
+      JSON.stringify(accountIds) !== JSON.stringify(currentRevision.accountIds) ||
+      categoryScope !== currentRevision.categoryScopeMode ||
+      JSON.stringify(categoryIds) !== JSON.stringify(currentRevision.categoryIds) ||
+      tagScope !== currentRevision.tagScopeMode ||
+      JSON.stringify(tagIds) !== JSON.stringify(currentRevision.tagIds) ||
+      tagMatchMode !== currentRevision.tagMatchMode ||
+      effectiveChoice !== 'NEXT');
+  const hasUnsavedChanges = !completed && (metadataDirty || revisionDirty || notificationDirty);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const confirmLeave = (event: React.MouseEvent<HTMLElement>) => {
+    if (!hasUnsavedChanges) return;
+    const leave = window.confirm(
+      copy(
+        locale,
+        'Tienes cambios sin guardar. ¿Quieres salir y descartarlos?',
+        'You have unsaved changes. Do you want to leave and discard them?',
+      ),
+    );
+    if (!leave) event.preventDefault();
+  };
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  useEffect(() => {
+    if (loading || !location.hash) return;
+    const sectionId = location.hash.slice(1);
+    if (!['general', 'financial', 'notifications', 'scheduled-revisions'].includes(sectionId)) return;
+    const animationFrame = requestAnimationFrame(() => scrollToSection(sectionId));
+    return () => cancelAnimationFrame(animationFrame);
+  }, [loading, location.hash, scrollToSection]);
 
   const validateRevision = () => {
     const targetError = budgetTargetValidationError(amount, locale);
@@ -298,7 +360,7 @@ const BudgetEdit = () => {
         description: description.trim() || null,
       });
       setNotice(copy(locale, 'El nombre y la descripción se actualizaron.', 'The name and description were updated.'));
-      await load();
+      await load({ resetMetadataDraft: true, resetRevisionDraft: false, blocking: false });
     } catch (problem) {
       setError(
         isConflict(problem)
@@ -354,7 +416,7 @@ const BudgetEdit = () => {
           : copy(locale, 'La revisión quedó programada para el período elegido.', 'The revision is scheduled for the chosen period.'),
       );
       requestId.current = newRequestId();
-      await load();
+      await load({ resetMetadataDraft: false, resetRevisionDraft: true, blocking: false });
     } catch (problem) {
       setError(
         isConflict(problem)
@@ -395,7 +457,7 @@ const BudgetEdit = () => {
         ),
       );
       cancellationRequestIds.current.delete(pendingCancellation.id);
-      await load();
+      await load({ resetMetadataDraft: false, resetRevisionDraft: false, blocking: false });
     } catch (problem) {
       setError(
         isConflict(problem)
@@ -446,6 +508,7 @@ const BudgetEdit = () => {
             color="secondary"
             outline
             to={`/budgets/${budgetId}?referenceDate=${currentEvaluation.startInclusive}`}
+            onClick={confirmLeave}
             data-cy="backToBudgetDetail"
           >
             {copy(locale, 'Volver al presupuesto', 'Back to budget')}
@@ -463,6 +526,73 @@ const BudgetEdit = () => {
         <div className="alert alert-success" role="status" data-cy="budgetEditNotice">
           {notice}
         </div>
+      ) : null}
+
+      {!completed ? (
+        <nav
+          className="border rounded-2 p-2 mb-4"
+          aria-label={copy(locale, 'Secciones de edición', 'Editing sections')}
+          data-cy="budgetEditSectionNav"
+        >
+          <div className="d-flex flex-wrap gap-2">
+            <Button
+              type="button"
+              color="secondary"
+              outline
+              size="sm"
+              aria-controls="general"
+              onClick={() => scrollToSection('general')}
+              data-cy="budgetEditSectionGeneralLink"
+            >
+              {copy(locale, 'General', 'General')}
+              {metadataDirty ? ` · ${copy(locale, 'sin guardar', 'unsaved')}` : ''}
+            </Button>
+            <Button
+              type="button"
+              color="secondary"
+              outline
+              size="sm"
+              aria-controls="financial"
+              onClick={() => scrollToSection('financial')}
+              data-cy="budgetEditSectionFinancialLink"
+            >
+              {copy(locale, 'Configuración financiera', 'Financial configuration')}
+              {revisionDirty ? ` · ${copy(locale, 'sin guardar', 'unsaved')}` : ''}
+            </Button>
+            <Button
+              type="button"
+              color="secondary"
+              outline
+              size="sm"
+              aria-controls="notifications"
+              onClick={() => scrollToSection('notifications')}
+              data-cy="budgetEditSectionNotificationsLink"
+            >
+              {copy(locale, 'Notificaciones', 'Notifications')}
+              {notificationDirty ? ` · ${copy(locale, 'sin guardar', 'unsaved')}` : ''}
+            </Button>
+            <Button
+              type="button"
+              color="secondary"
+              outline
+              size="sm"
+              aria-controls="scheduled-revisions"
+              onClick={() => scrollToSection('scheduled-revisions')}
+              data-cy="budgetEditSectionScheduledLink"
+            >
+              {copy(locale, 'Revisiones programadas', 'Scheduled revisions')}
+            </Button>
+          </div>
+          {hasUnsavedChanges ? (
+            <p className="small text-warning-emphasis mb-0 mt-2" role="status" data-cy="budgetEditUnsavedChanges">
+              {copy(
+                locale,
+                'Hay cambios sin guardar. Cada sección se guarda por separado.',
+                'There are unsaved changes. Each section saves separately.',
+              )}
+            </p>
+          ) : null}
+        </nav>
       ) : null}
 
       <ProductSection title={copy(locale, 'Lo que no cambia', 'What does not change')} className="mb-4">
@@ -495,326 +625,370 @@ const BudgetEdit = () => {
       </ProductSection>
 
       {completed ? (
-        <ProductSection title={copy(locale, 'Presupuesto completado', 'Completed budget')}>
-          <p className="mb-0">
-            {copy(
-              locale,
-              'Un presupuesto completado conserva su historial y no puede recibir cambios.',
-              'A completed budget preserves its history and cannot receive changes.',
-            )}
-          </p>
-        </ProductSection>
+        <div className="d-flex flex-column gap-4">
+          <ProductSection title={copy(locale, 'Presupuesto completado', 'Completed budget')}>
+            <p className="mb-0">
+              {copy(
+                locale,
+                'Un presupuesto completado conserva su historial y no puede recibir cambios.',
+                'A completed budget preserves its history and cannot receive changes.',
+              )}
+            </p>
+          </ProductSection>
+          <BudgetNotificationPreferencesSection
+            budgetId={budgetId}
+            type={item.type}
+            completed={completed}
+            locale={locale}
+            onDirtyChange={setNotificationDirty}
+          />
+        </div>
       ) : (
         <div className="d-flex flex-column gap-4">
-          <form onSubmit={saveMetadata} noValidate>
-            <ProductSection title={copy(locale, 'Nombre y descripción', 'Name and description')}>
-              <div className="row g-3 align-items-end">
-                <div className="col-12 col-md-5">
-                  <Label for="budget-edit-name">{copy(locale, 'Nombre', 'Name')}</Label>
-                  <Input
-                    id="budget-edit-name"
-                    value={name}
-                    onChange={event => setName(event.target.value)}
-                    disabled={savingMetadata}
-                    data-cy="budgetEditName"
-                  />
+          <div id="general" data-cy="budgetEditGeneral">
+            <form onSubmit={saveMetadata} noValidate>
+              <ProductSection title={copy(locale, 'General', 'General')}>
+                <div className="row g-3 align-items-end">
+                  <div className="col-12 col-md-5">
+                    <Label for="budget-edit-name">{copy(locale, 'Nombre', 'Name')}</Label>
+                    <Input
+                      id="budget-edit-name"
+                      value={name}
+                      onChange={event => setName(event.target.value)}
+                      disabled={savingMetadata}
+                      data-cy="budgetEditName"
+                    />
+                  </div>
+                  <div className="col-12 col-md-5">
+                    <Label for="budget-edit-description">{copy(locale, 'Descripción', 'Description')}</Label>
+                    <Input
+                      id="budget-edit-description"
+                      value={description}
+                      onChange={event => setDescription(event.target.value)}
+                      disabled={savingMetadata}
+                      data-cy="budgetEditDescription"
+                    />
+                  </div>
+                  <div className="col-12 col-md-2 d-flex flex-wrap gap-2">
+                    <Button color="primary" type="submit" disabled={savingMetadata || !metadataDirty} data-cy="saveBudgetMetadata">
+                      {savingMetadata
+                        ? copy(locale, 'Guardando…', 'Saving…')
+                        : copy(locale, 'Guardar nombre y descripción', 'Save name and description')}
+                    </Button>
+                    <Button
+                      color="secondary"
+                      outline
+                      type="button"
+                      disabled={savingMetadata || !metadataDirty}
+                      onClick={() => {
+                        setName(metadataBaseline.name);
+                        setDescription(metadataBaseline.description);
+                        setError(null);
+                      }}
+                      data-cy="cancelBudgetMetadata"
+                    >
+                      {copy(locale, 'Cancelar cambios', 'Cancel changes')}
+                    </Button>
+                  </div>
                 </div>
-                <div className="col-12 col-md-5">
-                  <Label for="budget-edit-description">{copy(locale, 'Descripción', 'Description')}</Label>
-                  <Input
-                    id="budget-edit-description"
-                    value={description}
-                    onChange={event => setDescription(event.target.value)}
-                    disabled={savingMetadata}
-                    data-cy="budgetEditDescription"
-                  />
-                </div>
-                <div className="col-12 col-md-2">
-                  <Button color="primary" type="submit" disabled={savingMetadata} data-cy="saveBudgetMetadata">
-                    {savingMetadata ? copy(locale, 'Guardando…', 'Saving…') : copy(locale, 'Guardar', 'Save')}
-                  </Button>
-                </div>
-              </div>
-            </ProductSection>
-          </form>
-
-          <ProductSection title={copy(locale, 'Configuración vigente', 'Current configuration')}>
-            <div className="row g-3">
-              <div className="col-12 col-md-4">
-                <div className="small text-muted text-uppercase">{copy(locale, 'Período actual', 'Current period')}</div>
-                <strong>{dateRange(currentEvaluation.startInclusive, currentEvaluation.endExclusive, locale)}</strong>
-              </div>
-              <div className="col-12 col-md-4">
-                <div className="small text-muted text-uppercase">{copy(locale, 'Objetivo actual', 'Current target')}</div>
-                <strong>{formatBudgetAmount(currentRevision.targetAmount, item.currency, locale)}</strong>
-              </div>
-              <div className="col-12 col-md-4">
-                <div className="small text-muted text-uppercase">{copy(locale, 'Alcance actual', 'Current scope')}</div>
-                <span>{scopeDescription(currentRevision, locale)}</span>
-              </div>
-            </div>
-          </ProductSection>
-
-          {scheduled ? (
-            <ProductSection title={copy(locale, 'Presupuesto programado', 'Scheduled budget')}>
-              <p className="mb-0" data-cy="budgetScheduledRevisionState">
-                {copy(
-                  locale,
-                  'Puedes actualizar el nombre y la descripción. La configuración financiera podrá revisarse cuando comience el primer período; el servidor no permite programar cambios antes de que exista un período actual.',
-                  'You can update the name and description. Financial configuration can be revised when the first period begins; the server does not allow changes before a current period exists.',
-                )}
-              </p>
-            </ProductSection>
-          ) : (
-            <>
-              <form onSubmit={requestRevisionReview} noValidate>
-                <ProductSection title={copy(locale, 'Nueva revisión', 'New revision')}>
-                  <p className="small text-muted">
-                    {copy(
-                      locale,
-                      'Esta acción nunca reescribe períodos anteriores. Un cambio actual cubre el período completo, sin prorrateo.',
-                      'This never rewrites earlier periods. A current change covers the whole period, without proration.',
-                    )}
+                {metadataDirty ? (
+                  <p className="small text-warning-emphasis mt-3 mb-0" role="status" data-cy="budgetEditMetadataDirty">
+                    {copy(locale, 'Cambios sin guardar en General.', 'Unsaved changes in General.')}
                   </p>
-                  <div className="row g-3 mb-4">
-                    <div className="col-12 col-md-4">
-                      <Label for="budget-edit-amount">{copy(locale, 'Nuevo objetivo', 'New target')}</Label>
-                      <Input
-                        id="budget-edit-amount"
-                        type="text"
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={event => {
-                          setAmount(event.target.value);
-                          setReviewing(false);
-                        }}
-                        disabled={savingRevision}
-                        data-cy="budgetEditAmount"
-                      />
-                    </div>
-                    <div className="col-12 col-md-8">
-                      <Label>{copy(locale, '¿Cuándo debe aplicar?', 'When should it apply?')}</Label>
-                      <div className="d-flex flex-column flex-md-row gap-3 pt-2">
-                        <Label check>
-                          <Input
-                            type="radio"
-                            name="budget-effective-choice"
-                            checked={effectiveChoice === 'CURRENT'}
-                            onChange={() => {
-                              setEffectiveChoice('CURRENT');
-                              setReviewing(false);
-                            }}
-                            disabled={!currentPeriod || savingRevision}
-                          />{' '}
-                          {copy(locale, 'Período actual', 'Current period')}
-                        </Label>
-                        <Label check>
-                          <Input
-                            type="radio"
-                            name="budget-effective-choice"
-                            checked={effectiveChoice === 'NEXT'}
-                            onChange={() => {
-                              setEffectiveChoice('NEXT');
-                              setReviewing(false);
-                            }}
-                            disabled={!nextPeriod || savingRevision}
-                          />{' '}
-                          {copy(locale, 'Período siguiente', 'Next period')}
-                        </Label>
-                        <Label check>
-                          <Input
-                            type="radio"
-                            name="budget-effective-choice"
-                            checked={effectiveChoice === 'FUTURE'}
-                            onChange={() => {
-                              setEffectiveChoice('FUTURE');
-                              setFutureStart(futurePeriods[0]?.startInclusive ?? '');
-                              setReviewing(false);
-                            }}
-                            disabled={!futurePeriods.length || savingRevision}
-                          />{' '}
-                          {copy(locale, 'Período futuro', 'Future period')}
-                        </Label>
-                      </div>
-                    </div>
-                    {effectiveChoice === 'FUTURE' ? (
-                      <div className="col-12 col-md-5">
-                        <Label for="budget-edit-future-period">{copy(locale, 'Límite de período', 'Period boundary')}</Label>
+                ) : null}
+              </ProductSection>
+            </form>
+          </div>
+
+          <div id="financial" data-cy="budgetEditFinancial">
+            <ProductSection title={copy(locale, 'Configuración financiera', 'Financial configuration')}>
+              <div className="row g-3">
+                <div className="col-12 col-md-4">
+                  <div className="small text-muted text-uppercase">{copy(locale, 'Período actual', 'Current period')}</div>
+                  <strong>{dateRange(currentEvaluation.startInclusive, currentEvaluation.endExclusive, locale)}</strong>
+                </div>
+                <div className="col-12 col-md-4">
+                  <div className="small text-muted text-uppercase">{copy(locale, 'Objetivo actual', 'Current target')}</div>
+                  <strong>{formatBudgetAmount(currentRevision.targetAmount, item.currency, locale)}</strong>
+                </div>
+                <div className="col-12 col-md-4">
+                  <div className="small text-muted text-uppercase">{copy(locale, 'Alcance actual', 'Current scope')}</div>
+                  <span>{scopeDescription(currentRevision, locale)}</span>
+                </div>
+              </div>
+            </ProductSection>
+
+            {scheduled ? (
+              <ProductSection title={copy(locale, 'Presupuesto programado', 'Scheduled budget')}>
+                <p className="mb-0" data-cy="budgetScheduledRevisionState">
+                  {copy(
+                    locale,
+                    'Puedes actualizar el nombre y la descripción. La configuración financiera podrá revisarse cuando comience el primer período; el servidor no permite programar cambios antes de que exista un período actual.',
+                    'You can update the name and description. Financial configuration can be revised when the first period begins; the server does not allow changes before a current period exists.',
+                  )}
+                </p>
+              </ProductSection>
+            ) : (
+              <>
+                <form onSubmit={requestRevisionReview} noValidate>
+                  <ProductSection title={copy(locale, 'Nueva revisión', 'New revision')}>
+                    <p className="small text-muted">
+                      {copy(
+                        locale,
+                        'Esta acción nunca reescribe períodos anteriores. Un cambio actual cubre el período completo, sin prorrateo.',
+                        'This never rewrites earlier periods. A current change covers the whole period, without proration.',
+                      )}
+                    </p>
+                    <div className="row g-3 mb-4">
+                      <div className="col-12 col-md-4">
+                        <Label for="budget-edit-amount">{copy(locale, 'Nuevo objetivo', 'New target')}</Label>
                         <Input
-                          id="budget-edit-future-period"
-                          type="select"
-                          value={futureStart}
+                          id="budget-edit-amount"
+                          type="text"
+                          inputMode="decimal"
+                          value={amount}
                           onChange={event => {
-                            setFutureStart(event.target.value);
+                            setAmount(event.target.value);
                             setReviewing(false);
                           }}
-                          data-cy="budgetEditFuturePeriod"
-                        >
-                          {futurePeriods.map(period => (
-                            <option value={period.startInclusive} key={period.index}>
-                              {dateRange(period.startInclusive, period.endExclusive, locale)}
-                            </option>
-                          ))}
-                        </Input>
+                          disabled={savingRevision}
+                          data-cy="budgetEditAmount"
+                        />
+                      </div>
+                      <div className="col-12 col-md-8">
+                        <Label>{copy(locale, '¿Cuándo debe aplicar?', 'When should it apply?')}</Label>
+                        <div className="d-flex flex-column flex-md-row gap-3 pt-2">
+                          <Label check>
+                            <Input
+                              type="radio"
+                              name="budget-effective-choice"
+                              checked={effectiveChoice === 'CURRENT'}
+                              onChange={() => {
+                                setEffectiveChoice('CURRENT');
+                                setReviewing(false);
+                              }}
+                              disabled={!currentPeriod || savingRevision}
+                            />{' '}
+                            {copy(locale, 'Período actual', 'Current period')}
+                          </Label>
+                          <Label check>
+                            <Input
+                              type="radio"
+                              name="budget-effective-choice"
+                              checked={effectiveChoice === 'NEXT'}
+                              onChange={() => {
+                                setEffectiveChoice('NEXT');
+                                setReviewing(false);
+                              }}
+                              disabled={!nextPeriod || savingRevision}
+                            />{' '}
+                            {copy(locale, 'Período siguiente', 'Next period')}
+                          </Label>
+                          <Label check>
+                            <Input
+                              type="radio"
+                              name="budget-effective-choice"
+                              checked={effectiveChoice === 'FUTURE'}
+                              onChange={() => {
+                                setEffectiveChoice('FUTURE');
+                                setFutureStart(futurePeriods[0]?.startInclusive ?? '');
+                                setReviewing(false);
+                              }}
+                              disabled={!futurePeriods.length || savingRevision}
+                            />{' '}
+                            {copy(locale, 'Período futuro', 'Future period')}
+                          </Label>
+                        </div>
+                      </div>
+                      {effectiveChoice === 'FUTURE' ? (
+                        <div className="col-12 col-md-5">
+                          <Label for="budget-edit-future-period">{copy(locale, 'Límite de período', 'Period boundary')}</Label>
+                          <Input
+                            id="budget-edit-future-period"
+                            type="select"
+                            value={futureStart}
+                            onChange={event => {
+                              setFutureStart(event.target.value);
+                              setReviewing(false);
+                            }}
+                            data-cy="budgetEditFuturePeriod"
+                          >
+                            {futurePeriods.map(period => (
+                              <option value={period.startInclusive} key={period.index}>
+                                {dateRange(period.startInclusive, period.endExclusive, locale)}
+                              </option>
+                            ))}
+                          </Input>
+                        </div>
+                      ) : null}
+                    </div>
+                    <BudgetScopeSection
+                      title={copy(locale, 'Alcance de la nueva revisión', 'New revision scope')}
+                      controlPrefix="budget-edit"
+                      locale={locale}
+                      submitting={savingRevision}
+                      referencesLoading={referencesLoading}
+                      currency={item.currency}
+                      accountScope={accountScope}
+                      setAccountScope={value => {
+                        setAccountScope(value);
+                        setReviewing(false);
+                      }}
+                      compatibleAccounts={compatibleAccounts}
+                      accountIds={accountIds}
+                      setAccountIds={next => {
+                        setAccountIds(next);
+                        setReviewing(false);
+                      }}
+                      categoryScope={categoryScope}
+                      setCategoryScope={value => {
+                        setCategoryScope(value);
+                        setReviewing(false);
+                      }}
+                      compatibleCategories={compatibleCategories}
+                      categoryIds={categoryIds}
+                      setCategoryIds={next => {
+                        setCategoryIds(next);
+                        setReviewing(false);
+                      }}
+                      tagScope={tagScope}
+                      setTagScope={value => {
+                        setTagScope(value);
+                        setReviewing(false);
+                      }}
+                      tagMatchMode={tagMatchMode}
+                      setTagMatchMode={value => {
+                        setTagMatchMode(value);
+                        setReviewing(false);
+                      }}
+                      selectedTags={selectedTags}
+                      tags={tags}
+                      setTagIds={next => {
+                        setTagIds(next);
+                        setReviewing(false);
+                      }}
+                      referenceError={error}
+                    />
+                    {!reviewing ? (
+                      <Button color="primary" type="submit" disabled={referencesLoading || savingRevision} data-cy="reviewBudgetRevision">
+                        {copy(locale, 'Revisar cambio', 'Review change')}
+                      </Button>
+                    ) : null}
+                    {reviewing ? (
+                      <div className="alert alert-info mt-4 mb-0" data-cy="budgetRevisionReview">
+                        <strong>{copy(locale, 'Revisa el cambio', 'Review the change')}</strong>
+                        <div className="mt-2">
+                          {copy(locale, 'Se aplicará desde', 'It will apply from')}:{' '}
+                          <strong>{effectiveStart ? formatBudgetDate(effectiveStart, locale) : '—'}</strong>.
+                        </div>
+                        {effectivePeriod ? (
+                          <div className="small mt-1">
+                            {copy(locale, 'Período completo', 'Complete period')}:{' '}
+                            {dateRange(effectivePeriod.startInclusive, effectivePeriod.endExclusive, locale)}
+                          </div>
+                        ) : null}
+                        {selectedFutureSchedule ? (
+                          <p className="mb-2 mt-2">
+                            {copy(
+                              locale,
+                              'Ya hay una revisión pendiente en este límite. Al confirmar, la reemplazarás explícitamente y ambas quedarán en el historial.',
+                              'There is already a pending revision at this boundary. Confirming explicitly replaces it and preserves both in history.',
+                            )}
+                          </p>
+                        ) : null}
+                        <div className="d-flex gap-2 mt-3">
+                          <Button type="button" color="secondary" outline onClick={() => setReviewing(false)}>
+                            {copy(locale, 'Cancelar', 'Cancel')}
+                          </Button>
+                          <Button
+                            type="button"
+                            color="primary"
+                            onClick={() => void saveRevision()}
+                            disabled={savingRevision}
+                            data-cy="confirmBudgetRevision"
+                          >
+                            {savingRevision
+                              ? copy(locale, 'Guardando…', 'Saving…')
+                              : selectedFutureSchedule
+                                ? copy(locale, 'Reemplazar revisión pendiente', 'Replace pending revision')
+                                : copy(locale, 'Confirmar revisión', 'Confirm revision')}
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
-                  </div>
-                  <BudgetScopeSection
-                    title={copy(locale, 'Alcance de la nueva revisión', 'New revision scope')}
-                    controlPrefix="budget-edit"
-                    locale={locale}
-                    submitting={savingRevision}
-                    referencesLoading={referencesLoading}
-                    currency={item.currency}
-                    accountScope={accountScope}
-                    setAccountScope={value => {
-                      setAccountScope(value);
-                      setReviewing(false);
-                    }}
-                    compatibleAccounts={compatibleAccounts}
-                    accountIds={accountIds}
-                    setAccountIds={next => {
-                      setAccountIds(next);
-                      setReviewing(false);
-                    }}
-                    categoryScope={categoryScope}
-                    setCategoryScope={value => {
-                      setCategoryScope(value);
-                      setReviewing(false);
-                    }}
-                    compatibleCategories={compatibleCategories}
-                    categoryIds={categoryIds}
-                    setCategoryIds={next => {
-                      setCategoryIds(next);
-                      setReviewing(false);
-                    }}
-                    tagScope={tagScope}
-                    setTagScope={value => {
-                      setTagScope(value);
-                      setReviewing(false);
-                    }}
-                    tagMatchMode={tagMatchMode}
-                    setTagMatchMode={value => {
-                      setTagMatchMode(value);
-                      setReviewing(false);
-                    }}
-                    selectedTags={selectedTags}
-                    tags={tags}
-                    setTagIds={next => {
-                      setTagIds(next);
-                      setReviewing(false);
-                    }}
-                    referenceError={error}
-                  />
-                  {!reviewing ? (
-                    <Button color="primary" type="submit" disabled={referencesLoading || savingRevision} data-cy="reviewBudgetRevision">
-                      {copy(locale, 'Revisar cambio', 'Review change')}
-                    </Button>
-                  ) : null}
-                  {reviewing ? (
-                    <div className="alert alert-info mt-4 mb-0" data-cy="budgetRevisionReview">
-                      <strong>{copy(locale, 'Revisa el cambio', 'Review the change')}</strong>
-                      <div className="mt-2">
-                        {copy(locale, 'Se aplicará desde', 'It will apply from')}:{' '}
-                        <strong>{effectiveStart ? formatBudgetDate(effectiveStart, locale) : '—'}</strong>.
-                      </div>
-                      {effectivePeriod ? (
-                        <div className="small mt-1">
-                          {copy(locale, 'Período completo', 'Complete period')}:{' '}
-                          {dateRange(effectivePeriod.startInclusive, effectivePeriod.endExclusive, locale)}
-                        </div>
-                      ) : null}
-                      {selectedFutureSchedule ? (
-                        <p className="mb-2 mt-2">
-                          {copy(
-                            locale,
-                            'Ya hay una revisión pendiente en este límite. Al confirmar, la reemplazarás explícitamente y ambas quedarán en el historial.',
-                            'There is already a pending revision at this boundary. Confirming explicitly replaces it and preserves both in history.',
-                          )}
-                        </p>
-                      ) : null}
-                      <div className="d-flex gap-2 mt-3">
-                        <Button type="button" color="secondary" outline onClick={() => setReviewing(false)}>
-                          {copy(locale, 'Cancelar', 'Cancel')}
-                        </Button>
-                        <Button
-                          type="button"
-                          color="primary"
-                          onClick={() => void saveRevision()}
-                          disabled={savingRevision}
-                          data-cy="confirmBudgetRevision"
-                        >
-                          {savingRevision
-                            ? copy(locale, 'Guardando…', 'Saving…')
-                            : selectedFutureSchedule
-                              ? copy(locale, 'Reemplazar revisión pendiente', 'Replace pending revision')
-                              : copy(locale, 'Confirmar revisión', 'Confirm revision')}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </ProductSection>
-              </form>
+                  </ProductSection>
+                </form>
+              </>
+            )}
+          </div>
 
-              <ProductSection title={copy(locale, 'Revisiones futuras programadas', 'Scheduled future revisions')}>
-                {!activeFutureSchedules.length ? (
-                  <p className="text-muted mb-0">{copy(locale, 'No hay revisiones pendientes.', 'There are no pending revisions.')}</p>
-                ) : (
-                  <div className="d-flex flex-column gap-3">
-                    {activeFutureSchedules.map(schedule => {
-                      const revision = revisionFor(schedule);
-                      return (
-                        <div className="border rounded-2 p-3" key={schedule.id} data-cy={`pendingRevision-${schedule.id}`}>
-                          <div className="d-flex flex-wrap justify-content-between gap-3">
-                            <div>
-                              <strong>{scheduleTitle(schedule, revision, item.currency, locale)}</strong>
-                              <div className="small text-muted mt-1">{revision ? scopeDescription(revision, locale) : null}</div>
-                            </div>
-                            <Button
-                              type="button"
-                              color="danger"
-                              outline
-                              size="sm"
-                              onClick={() => setPendingCancellation(schedule)}
-                              data-cy={`cancelPendingRevision-${schedule.id}`}
-                            >
-                              {copy(locale, 'Cancelar revisión', 'Cancel revision')}
-                            </Button>
+          <BudgetNotificationPreferencesSection
+            budgetId={budgetId}
+            type={item.type}
+            completed={completed}
+            locale={locale}
+            onDirtyChange={setNotificationDirty}
+          />
+
+          <div id="scheduled-revisions" data-cy="budgetEditScheduledRevisions">
+            <ProductSection title={copy(locale, 'Revisiones futuras programadas', 'Scheduled future revisions')}>
+              {!activeFutureSchedules.length ? (
+                <p className="text-muted mb-0">{copy(locale, 'No hay revisiones pendientes.', 'There are no pending revisions.')}</p>
+              ) : (
+                <div className="d-flex flex-column gap-3">
+                  {activeFutureSchedules.map(schedule => {
+                    const revision = revisionFor(schedule);
+                    return (
+                      <div className="border rounded-2 p-3" key={schedule.id} data-cy={`pendingRevision-${schedule.id}`}>
+                        <div className="d-flex flex-wrap justify-content-between gap-3">
+                          <div>
+                            <strong>{scheduleTitle(schedule, revision, item.currency, locale)}</strong>
+                            <div className="small text-muted mt-1">{revision ? scopeDescription(revision, locale) : null}</div>
                           </div>
-                          {pendingCancellation?.id === schedule.id ? (
-                            <div className="alert alert-warning mt-3 mb-0">
-                              <div>
-                                {copy(
-                                  locale,
-                                  '¿Cancelar esta revisión pendiente? No se elimina el historial y el período futuro usará la configuración anterior.',
-                                  'Cancel this pending revision? History remains and the future period uses the prior configuration.',
-                                )}
-                              </div>
-                              <div className="d-flex gap-2 mt-2">
-                                <Button type="button" color="secondary" outline size="sm" onClick={() => setPendingCancellation(null)}>
-                                  {copy(locale, 'Conservar', 'Keep')}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  color="danger"
-                                  size="sm"
-                                  onClick={() => void cancelPendingRevision()}
-                                  disabled={savingRevision}
-                                  data-cy="confirmCancelPendingRevision"
-                                >
-                                  {copy(locale, 'Confirmar cancelación', 'Confirm cancellation')}
-                                </Button>
-                              </div>
-                            </div>
-                          ) : null}
+                          <Button
+                            type="button"
+                            color="danger"
+                            outline
+                            size="sm"
+                            onClick={() => setPendingCancellation(schedule)}
+                            data-cy={`cancelPendingRevision-${schedule.id}`}
+                          >
+                            {copy(locale, 'Cancelar revisión', 'Cancel revision')}
+                          </Button>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </ProductSection>
-            </>
-          )}
+                        {pendingCancellation?.id === schedule.id ? (
+                          <div className="alert alert-warning mt-3 mb-0">
+                            <div>
+                              {copy(
+                                locale,
+                                '¿Cancelar esta revisión pendiente? No se elimina el historial y el período futuro usará la configuración anterior.',
+                                'Cancel this pending revision? History remains and the future period uses the prior configuration.',
+                              )}
+                            </div>
+                            <div className="d-flex gap-2 mt-2">
+                              <Button type="button" color="secondary" outline size="sm" onClick={() => setPendingCancellation(null)}>
+                                {copy(locale, 'Conservar', 'Keep')}
+                              </Button>
+                              <Button
+                                type="button"
+                                color="danger"
+                                size="sm"
+                                onClick={() => void cancelPendingRevision()}
+                                disabled={savingRevision}
+                                data-cy="confirmCancelPendingRevision"
+                              >
+                                {copy(locale, 'Confirmar cancelación', 'Confirm cancellation')}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </ProductSection>
+          </div>
         </div>
       )}
     </ProductPage>

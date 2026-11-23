@@ -11,8 +11,10 @@ import {
   getBudgetHistory,
   getBudgetOperationalPeriods,
   getBudgetOverview,
+  getBudgetNotificationPreferences,
   replaceBudgetRevision,
   scheduleBudgetRevision,
+  updateBudgetNotificationPreferences,
   updateBudgetMetadata,
 } from './budget-api';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
@@ -27,7 +29,9 @@ jest.mock('./budget-api', () => ({
   getBudgetCurrentEvaluation: jest.fn(),
   getBudgetEffectiveRevision: jest.fn(),
   getBudgetOperationalPeriods: jest.fn(),
+  getBudgetNotificationPreferences: jest.fn(),
   updateBudgetMetadata: jest.fn(),
+  updateBudgetNotificationPreferences: jest.fn(),
   scheduleBudgetRevision: jest.fn(),
   replaceBudgetRevision: jest.fn(),
   cancelBudgetRevision: jest.fn(),
@@ -44,7 +48,9 @@ const mockAtDate = getBudgetEvaluationAtDate as jest.Mock;
 const mockCurrent = getBudgetCurrentEvaluation as jest.Mock;
 const mockRevision = getBudgetEffectiveRevision as jest.Mock;
 const mockPeriods = getBudgetOperationalPeriods as jest.Mock;
+const mockNotificationPreferences = getBudgetNotificationPreferences as jest.Mock;
 const mockUpdateMetadata = updateBudgetMetadata as jest.Mock;
+const mockUpdateNotificationPreferences = updateBudgetNotificationPreferences as jest.Mock;
 const mockSchedule = scheduleBudgetRevision as jest.Mock;
 const mockReplace = replaceBudgetRevision as jest.Mock;
 const mockCancel = cancelBudgetRevision as jest.Mock;
@@ -167,7 +173,27 @@ describe('BudgetEdit', () => {
     mockAccounts.mockResolvedValue([{ id: 41, name: 'Cash card', currency: 'MXN', accountType: 'DEBIT', active: true }]);
     mockCategories.mockResolvedValue([{ id: 51, name: 'Food', categoryType: 'EXPENSE', active: true }]);
     mockTags.mockResolvedValue([{ id: 61, name: 'Essential', active: true }]);
+    mockNotificationPreferences.mockResolvedValue({
+      budgetId: 10,
+      configured: true,
+      version: 3,
+      percentageAlertsEnabled: true,
+      thresholdPercentages: ['50', '80.1250'],
+      periodCloseEnabled: true,
+      periodCloseEnabledSince: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-01T00:00:00Z',
+    });
     mockUpdateMetadata.mockResolvedValue({ budgetId: 10, version: 5 });
+    mockUpdateNotificationPreferences.mockImplementation((_id, payload) =>
+      Promise.resolve({
+        budgetId: 10,
+        configured: true,
+        version: 4,
+        periodCloseEnabledSince: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+        ...payload,
+      }),
+    );
     mockSchedule.mockResolvedValue({ budgetId: 10, version: 5, effectivePeriodStart: '2026-05-01' });
     mockReplace.mockResolvedValue({ budgetId: 10, version: 5, effectivePeriodStart: '2026-07-01' });
     mockCancel.mockResolvedValue({ budgetId: 10, version: 5, effectivePeriodStart: '2026-07-01' });
@@ -184,6 +210,144 @@ describe('BudgetEdit', () => {
     expect(screen.getByText('New revision scope')).toBeTruthy();
     expect(mockRevision).toHaveBeenCalledWith(10, '2026-05-01');
     expect(mockPeriods).toHaveBeenCalledWith(10, expect.objectContaining({ firstIndex: 4, lastIndex: 64 }));
+  });
+
+  it('organizes independent General, financial, notification and scheduled-revision sections without a global save', async () => {
+    renderEdit();
+
+    await waitFor(() => expect(byCy('budgetEditSectionNav')).toBeTruthy());
+    expect(byCy('budgetEditSectionNav')).toBeTruthy();
+    expect(byCy('budgetEditGeneral')).toBeTruthy();
+    expect(byCy('budgetEditFinancial')).toBeTruthy();
+    expect(byCy('budgetEditNotifications')).toBeTruthy();
+    expect(byCy('budgetEditScheduledRevisions')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save name and description' })).toBeTruthy();
+    await waitFor(() => expect(byCy('saveBudgetNotificationPreferences')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Save notifications' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /save all/i })).toBeNull();
+  });
+
+  it('preserves an unsaved notification draft when General saves and saves notification preferences independently', async () => {
+    renderEdit();
+    await waitFor(() => expect(byCy('saveBudgetNotificationPreferences')).toBeTruthy());
+
+    fireEvent.change(byCy('budgetEditName'), { target: { value: 'Food essentials' } });
+    fireEvent.click(byCy('budgetEditNotificationSuggestion50'));
+    expect(byCy('budgetEditMetadataDirty')).toBeTruthy();
+    expect(byCy('budgetEditNotificationDirty')).toBeTruthy();
+
+    fireEvent.click(byCy('saveBudgetMetadata'));
+    await waitFor(() => expect(mockUpdateMetadata).toHaveBeenCalledWith(10, expect.objectContaining({ name: 'Food essentials' })));
+    expect(byCy('budgetEditNotificationDirty')).toBeTruthy();
+    expect((byCy('budgetEditNotificationSuggestion50') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('false');
+    expect(mockUpdateNotificationPreferences).not.toHaveBeenCalled();
+
+    fireEvent.click(byCy('saveBudgetNotificationPreferences'));
+    await waitFor(() =>
+      expect(mockUpdateNotificationPreferences).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({ expectedVersion: 3, thresholdPercentages: ['80.1250'] }),
+      ),
+    );
+    expect(byCy('budgetEditNotificationDirty')).toBeNull();
+  });
+
+  it('cancels only General changes and leaves the financial configuration untouched', async () => {
+    renderEdit();
+    await screen.findByText('New revision');
+
+    fireEvent.change(byCy('budgetEditName'), { target: { value: 'Draft name' } });
+    fireEvent.change(byCy('budgetEditAmount'), { target: { value: '650' } });
+    expect(byCy('budgetEditMetadataDirty')).toBeTruthy();
+    expect(byCy('budgetEditUnsavedChanges')).toBeTruthy();
+
+    fireEvent.click(byCy('cancelBudgetMetadata'));
+    expect((byCy('budgetEditName') as HTMLInputElement).value).toBe('Food limit');
+    expect((byCy('budgetEditAmount') as HTMLInputElement).value).toBe('650');
+    expect(byCy('budgetEditMetadataDirty')).toBeNull();
+    expect(byCy('budgetEditUnsavedChanges')).toBeTruthy();
+  });
+
+  it('preserves the metadata draft after a metadata-version conflict', async () => {
+    mockUpdateMetadata.mockRejectedValueOnce({ response: { status: 409 } });
+    renderEdit();
+    await waitFor(() => expect(byCy('saveBudgetMetadata')).toBeTruthy());
+
+    fireEvent.change(byCy('budgetEditName'), { target: { value: 'Conflicting food budget' } });
+    fireEvent.click(byCy('saveBudgetMetadata'));
+
+    expect(await screen.findByText('This budget changed elsewhere. Reload and review before saving.')).toBeTruthy();
+    expect((byCy('budgetEditName') as HTMLInputElement).value).toBe('Conflicting food budget');
+    expect(byCy('budgetEditMetadataDirty')).toBeTruthy();
+  });
+
+  it('keeps an unsaved notification draft after a preference-version conflict', async () => {
+    mockUpdateNotificationPreferences.mockRejectedValueOnce({ response: { status: 409 } });
+    renderEdit();
+    await waitFor(() => expect(byCy('saveBudgetNotificationPreferences')).toBeTruthy());
+
+    fireEvent.click(byCy('budgetEditNotificationSuggestion50'));
+    fireEvent.click(byCy('saveBudgetNotificationPreferences'));
+
+    expect(
+      await screen.findByText(
+        'Notification settings changed in another session. The current version was loaded; review your draft and save again.',
+      ),
+    ).toBeTruthy();
+    expect(byCy('budgetEditNotificationDirty')).toBeTruthy();
+    expect((byCy('budgetEditNotificationSuggestion50') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps notification preferences editable for a paused budget', async () => {
+    mockOverview.mockResolvedValue({
+      referenceDate: '2026-05-10',
+      timeZone: 'America/Mexico_City',
+      budgets: [
+        {
+          budgetId: 10,
+          name: 'Food limit',
+          description: 'Groceries only',
+          type: 'EXPENSE',
+          currency: 'MXN',
+          operationalStatus: 'PAUSED',
+          hasPeriodAtReferenceDate: true,
+          referenceMessage: null,
+          evaluation: { ...currentEvaluation, operationalStatus: 'PAUSED' },
+        },
+      ],
+    });
+    renderEdit();
+
+    await waitFor(() => expect(byCy('saveBudgetNotificationPreferences')).toBeTruthy());
+    expect(byCy('budgetEditNotificationReadOnly')).toBeNull();
+    expect((byCy('saveBudgetNotificationPreferences') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows completed notification settings read-only without editable controls', async () => {
+    mockOverview.mockResolvedValue({
+      referenceDate: '2026-05-10',
+      timeZone: 'America/Mexico_City',
+      budgets: [
+        {
+          budgetId: 10,
+          name: 'Food limit',
+          description: 'Groceries only',
+          type: 'EXPENSE',
+          currency: 'MXN',
+          operationalStatus: 'COMPLETED',
+          hasPeriodAtReferenceDate: true,
+          referenceMessage: null,
+          evaluation: { ...currentEvaluation, operationalStatus: 'COMPLETED' },
+        },
+      ],
+    });
+    renderEdit();
+
+    expect(await screen.findByText('Completed budget')).toBeTruthy();
+    expect(await screen.findByText('This Budget has finished. Its preferences remain available for review only.')).toBeTruthy();
+    expect(byCy('budgetEditNotificationReadOnly')).toBeTruthy();
+    expect(byCy('saveBudgetNotificationPreferences')).toBeNull();
+    expect(byCy('budgetEditSectionNav')).toBeNull();
   });
 
   it('uses the immutable revision endpoint after explicit current-period review', async () => {

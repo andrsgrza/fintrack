@@ -115,7 +115,8 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
         cy.get('[data-cy="budgetDetailIdentity"]')
           .invoke('text')
           .should('match', /Active|Activo/);
-        cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('be.enabled');
+        cy.get('[data-cy="configureBudgetNotifications"]').click();
+        cy.get('[data-cy="budgetEditNotificationThresholdEnabled"]').should('be.enabled');
         cy.authenticatedRequest<Preference>({ method: 'GET', url: `/api/budgets/${finishedBudget.id}/notification-preferences` })
           .then(({ body, status }) => {
             expect(status).to.equal(200);
@@ -144,23 +145,25 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
     cy.get('[data-cy="budgetDetailIdentity"]')
       .invoke('text')
       .should('match', /Paused|Pausado/);
+    cy.get('[data-cy="configureBudgetNotifications"]').click();
+    cy.get('[data-cy="budgetEditNotificationThresholdEnabled"]').should('be.enabled');
+    cy.get('[data-cy="budgetEditNotificationOpenCustomThreshold"]').click();
+    cy.get('[data-cy="budgetEditNotificationCustomThreshold"]').type('80');
+    cy.get('[data-cy="budgetEditNotificationAddThreshold"]').click();
+    cy.get('[data-cy="budgetEditNotificationPeriodCloseEnabled"]').should('be.checked').click();
     cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('be.enabled');
-    cy.get('[data-cy="budgetDetailNotificationOpenCustomThreshold"]').click();
-    cy.get('[data-cy="budgetDetailNotificationCustomThreshold"]').type('80');
-    cy.get('[data-cy="budgetDetailNotificationAddThreshold"]').click();
-    cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('be.checked').click();
     cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
     cy.wait('@savePausedPreferences').then(({ response }) => expect(response?.statusCode).to.equal(200));
     cy.reload();
-    cy.get('[data-cy="budgetDetailNotificationSuggestion80"]').should('have.attr', 'aria-pressed', 'true');
-    cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('not.be.checked');
+    cy.get('[data-cy="budgetEditNotificationSuggestion80"]').should('have.attr', 'aria-pressed', 'true');
+    cy.get('[data-cy="budgetEditNotificationPeriodCloseEnabled"]').should('not.be.checked');
 
     findBudget(finishedBudgetName).then(finished => {
       cy.visit(`/budgets/${finished.budgetId}?referenceDate=${boundary}`);
       cy.get('[data-cy="budgetDetailIdentity"]')
         .invoke('text')
         .should('match', /Completed|Completado/);
-      cy.get('[data-cy="budgetDetailNotificationReadOnly"]').should('be.visible').and('contain.text', '70%');
+      cy.get('[data-cy="budgetNotificationPreferencesSummary"]').should('be.visible').and('contain.text', '70%');
       cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('not.exist');
       cy.authenticatedRequest<Preference>({ method: 'GET', url: `/api/budgets/${finished.budgetId}/notification-preferences` })
         .then(({ body, status }) => {

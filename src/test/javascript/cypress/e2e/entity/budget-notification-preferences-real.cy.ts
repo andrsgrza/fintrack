@@ -60,8 +60,21 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
 
       cy.location('pathname').should('eq', `/budgets/${budgetId}`);
       cy.wait('@loadPreferences').its('response.statusCode').should('eq', 200);
-      cy.get('[data-cy="budgetDetailNotificationThresholdEnabled"]').should('be.checked');
-      cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('be.checked');
+      cy.get('[data-cy="budgetNotificationPreferencesSummary"]').should('contain.text', '50%').and('contain.text', '100.125%');
+      cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('not.exist');
+      cy.get('[data-cy="budgetNotificationPreferencesSection"]').scrollIntoView();
+      cy.get('[data-cy="budgetNotificationPreferencesSection"]').screenshot('budget-detail-read-only-desktop');
+      cy.get('[data-cy="configureBudgetNotifications"]').click();
+      cy.location('pathname').should('eq', `/budgets/${budgetId}/edit`);
+      cy.get('[data-cy="budgetEditSectionNav"]').should('be.visible').screenshot('budget-edit-section-navigation-desktop');
+      cy.get('[data-cy="budgetEditSectionGeneralLink"]').click();
+      cy.get('[data-cy="budgetEditName"]').clear();
+      cy.get('[data-cy="budgetEditName"]').type(`${budgetName} local draft`);
+      cy.get('[data-cy="budgetEditMetadataDirty"]').should('be.visible');
+      cy.get('[data-cy="budgetEditSectionNotificationsLink"]').click();
+      cy.get('[data-cy="budgetEditNotifications"]').scrollIntoView();
+      cy.get('[data-cy="budgetEditNotificationThresholdEnabled"]').should('be.checked');
+      cy.get('[data-cy="budgetEditNotificationPeriodCloseEnabled"]').should('be.checked');
       cy.authenticatedRequest<Preference>({ method: 'GET', url: `/api/budgets/${budgetId}/notification-preferences` }).then(
         ({ body, status }) => {
           expect(status).to.equal(200);
@@ -79,30 +92,34 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
 
       // OFF cancels the active threshold episode but retains the exact stored values. Saving preferences itself has
       // no notification-producing endpoint.
-      cy.get('[data-cy="budgetDetailNotificationThresholdEnabled"]').click();
-      cy.get('[data-cy="budgetDetailNotificationThresholdSelector"]').should('not.exist');
+      cy.get('[data-cy="budgetEditNotificationThresholdEnabled"]').click();
+      cy.get('[data-cy="budgetEditNotificationThresholdSelector"]').should('not.exist');
       cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
       cy.wait('@savePreferences').then(({ request, response }) => {
         expect(request.body.percentageAlertsEnabled).to.equal(false);
         expect(request.body.thresholdPercentages).to.deep.equal(['50.0000', '80.0000', '100.1250']);
         expect(response?.statusCode).to.equal(200);
       });
-      cy.get('[data-cy="budgetDetailNotificationThresholdEnabled"]').click();
-      cy.get('[data-cy="budgetDetailNotificationThresholdSelector"]').should('be.visible');
-      cy.contains('[data-cy="budgetDetailNotificationCustomChip"]', '100.125%').should('be.visible');
+      cy.get('[data-cy="budgetEditMetadataDirty"]').should('be.visible');
+      cy.get('[data-cy="budgetEditName"]').should('have.value', `${budgetName} local draft`);
+      cy.get('[data-cy="cancelBudgetMetadata"]').click();
+      cy.get('[data-cy="budgetEditMetadataDirty"]').should('not.exist');
+      cy.get('[data-cy="budgetEditNotificationThresholdEnabled"]').click();
+      cy.get('[data-cy="budgetEditNotificationThresholdSelector"]').should('be.visible');
+      cy.contains('[data-cy="budgetEditNotificationCustomChip"]', '100.125%').should('be.visible');
 
       // OFF cancels the active period-close episode. Saving preferences itself has no notification-producing endpoint.
-      cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').click();
+      cy.get('[data-cy="budgetEditNotificationPeriodCloseEnabled"]').click();
       cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
       cy.wait('@savePreferences').then(({ request, response }) => {
         expect(request.body.periodCloseEnabled).to.equal(false);
         expect(response?.statusCode).to.equal(200);
         expect(response?.body.periodCloseEnabledSince).to.equal(null);
       });
-      cy.get('[data-cy="budgetNotificationNotice"]').should('be.visible');
+      cy.get('[data-cy="budgetEditNotificationNotice"]').should('be.visible');
 
       // Re-enabling starts a fresh persisted episode; it does not invoke a period-close producer.
-      cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').click();
+      cy.get('[data-cy="budgetEditNotificationPeriodCloseEnabled"]').click();
       cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
       cy.wait('@savePreferences').then(({ request, response }) => {
         expect(request.body.periodCloseEnabled).to.equal(true);
@@ -111,8 +128,8 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
       });
       cy.reload();
       cy.wait('@loadPreferences').its('response.statusCode').should('eq', 200);
-      cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('be.checked');
-      cy.get('[data-cy="budgetDetailNotificationEditor"] section')
+      cy.get('[data-cy="budgetEditNotificationPeriodCloseEnabled"]').should('be.checked');
+      cy.get('[data-cy="budgetEditNotificationEditor"] section')
         .first()
         .should('be.visible')
         .then($section => {
@@ -132,9 +149,86 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
       cy.get('#budget-type').select('INCOME');
       cy.contains('h3', /Income alerts|Alertas de ingresos/).should('be.visible');
       cy.viewport(390, 844);
+      cy.visit(`/budgets/${budgetId}/edit`);
+      cy.get('[data-cy="budgetEditSectionNav"]').should('be.visible').screenshot('budget-edit-section-navigation-mobile');
+      cy.visit('/budgets/new');
       cy.get('[data-cy="budgetCreateNotificationThresholdEnabled"]').click();
       cy.get('[data-cy="budgetCreateNotificationSuggestion50"]').click();
       cy.get('[data-cy="budgetCreateNotificationEditor"]').should('be.visible').screenshot('budget-notification-preferences-mobile');
+    });
+  });
+
+  it('preserves the editor draft after a real concurrent preference update', () => {
+    const budgetName = `Notification conflict ${suffix}`;
+    cy.login(username, password);
+    cy.authenticatedRequest<BudgetReference>({
+      method: 'POST',
+      url: '/api/budgets',
+      body: {
+        name: budgetName,
+        description: 'Concurrent notification-preference fixture',
+        type: 'EXPENSE',
+        currency: 'MXN',
+        clientRequestId: `notification-conflict-${suffix}`,
+        timeZone: 'America/Mexico_City',
+        initialRevision: {
+          targetAmount: '100.00',
+          intervalCount: 1,
+          intervalUnit: 'MONTH',
+          alignment: 'ANCHORED',
+          anchorDate: '2026-11-19',
+          customDayOfMonth: null,
+          recurrenceMode: 'RECURRING',
+          termination: 'NONE',
+          terminationPeriodCount: null,
+          recurrenceEndDate: null,
+          accountScopeMode: 'ALL',
+          accountIds: [],
+          categoryScopeMode: 'ALL',
+          categoryIds: [],
+          tagScopeMode: 'NONE',
+          tagIds: [],
+          tagMatchMode: 'ANY',
+        },
+        notificationPreferences: {
+          percentageAlertsEnabled: true,
+          thresholdPercentages: ['50'],
+          periodCloseEnabled: true,
+        },
+      },
+    }).then(({ body, status }) => {
+      expect(status).to.equal(201);
+      cy.intercept('PUT', `/api/budgets/${body.id}/notification-preferences`).as('editorConflictSave');
+      cy.visit(`/budgets/${body.id}/edit#notifications`);
+      cy.get('[data-cy="budgetEditNotificationSuggestion80"]').should('have.attr', 'aria-pressed', 'false').click();
+      cy.authenticatedRequest<Preference>({ method: 'GET', url: `/api/budgets/${body.id}/notification-preferences` })
+        .then(({ body: current, status: readStatus }) => {
+          expect(readStatus).to.equal(200);
+          return cy
+            .authenticatedRequest<Preference>({
+              method: 'PUT',
+              url: `/api/budgets/${body.id}/notification-preferences`,
+              body: {
+                percentageAlertsEnabled: true,
+                thresholdPercentages: ['50', '70'],
+                periodCloseEnabled: true,
+                expectedVersion: current.version,
+              },
+            })
+            .then(({ body: updated, status: updateStatus }) => {
+              expect(updateStatus).to.equal(200);
+              expect(updated.version).to.not.equal(current.version);
+            });
+        })
+        .then(() => {
+          cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
+          cy.wait('@editorConflictSave').its('response.statusCode').should('eq', 409);
+          cy.get('[data-cy="budgetEditNotificationError"]')
+            .invoke('text')
+            .should('match', /cambiaron en otra sesión|changed in another session/);
+          cy.get('[data-cy="budgetEditNotificationSuggestion80"]').should('have.attr', 'aria-pressed', 'true');
+          cy.get('[data-cy="budgetEditNotificationDirty"]').should('be.visible');
+        });
     });
   });
 
@@ -181,9 +275,9 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
       cy.visit(`/budgets/${body.id}?referenceDate=2026-11-19`);
     });
 
-    cy.get('[data-cy="budgetDetailNotificationReadOnly"]').should('be.visible').and('contain.text', '87.125%');
+    cy.get('[data-cy="budgetNotificationPreferencesSummary"]').should('be.visible').and('contain.text', '87.125%');
     cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('not.exist');
-    cy.get('[data-cy="budgetDetailNotificationReadOnly"] dl')
+    cy.get('[data-cy="budgetNotificationPreferencesSummary"]')
       .should('be.visible')
       .then($summary => {
         cy.window().then(window => window.scrollTo(0, window.scrollY + $summary[0].getBoundingClientRect().top - 12));

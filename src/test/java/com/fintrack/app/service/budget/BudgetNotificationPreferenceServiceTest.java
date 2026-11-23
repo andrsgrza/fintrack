@@ -140,6 +140,21 @@ class BudgetNotificationPreferenceServiceTest {
     }
 
     @Test
+    void advancesTheAuditTimestampForThresholdOnlyUpdates() {
+        BudgetNotificationPreference existing = BudgetNotificationPreference.create(budget, true, true, NOW);
+        ReflectionTestUtils.setField(existing, "version", 4L);
+        when(preferenceRepository.findOneForOwnedMutation(12L, "owner")).thenReturn(Optional.of(existing));
+        when(preferenceRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.update(
+            12L,
+            new BudgetNotificationPreferenceUpdateCommand(4L, true, Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000")), true)
+        );
+
+        assertThat(existing.getUpdatedAt()).isEqualTo(NOW.plusNanos(1));
+    }
+
+    @Test
     void startsAnImmediateCloseEpisodeOnlyOnAGenuineOffToOnTransition() {
         Instant originalEpisode = NOW.minusSeconds(3600);
         BudgetNotificationPreference existing = BudgetNotificationPreference.create(budget, false, true, originalEpisode);
