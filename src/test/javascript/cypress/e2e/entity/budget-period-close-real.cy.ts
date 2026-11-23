@@ -13,7 +13,7 @@ describe('Budget period-close notification producer real acceptance', { retries:
     configured: boolean;
     version: number | null;
     percentageAlertsEnabled: boolean;
-    thresholdPercentages: number[];
+    thresholdPercentages: string[];
     periodCloseEnabled: boolean;
     periodCloseEnabledSince: string | null;
   };
@@ -38,6 +38,10 @@ describe('Budget period-close notification producer real acceptance', { retries:
   const accountName = `Period close account ${fixture}`;
   const categoryName = `Period close category ${fixture}`;
   const eventKeyFor = (budgetId: number) => `PERIOD_CLOSED:${budgetId}:2026-03-31`;
+  const hasPeriodCloseKey = (notification: Notification, logicalEventKey: string) =>
+    notification.notificationType === 'PERIOD_CLOSED' && notification.snapshot.logicalEventKey === logicalEventKey;
+  const hasPeriodCloseKeyPrefix = (notification: Notification, prefix: string) =>
+    notification.notificationType === 'PERIOD_CLOSED' && notification.snapshot.logicalEventKey.startsWith(prefix);
   const lifecycleFixture = Cypress.env('BUDGET_PERIOD_CLOSE_LIFECYCLE_FIXTURE') ?? 'budget-6cc-lifecycle';
   const recoveryBudgetName = `Period close recovery ${lifecycleFixture}`;
   const onceBudgetName = `Period close once ${lifecycleFixture}`;
@@ -81,8 +85,8 @@ describe('Budget period-close notification producer real acceptance', { retries:
       tagMatchMode: 'ANY',
     },
     notificationPreferences: {
-      percentageAlertsEnabled: false,
-      thresholdPercentages: [],
+      percentageAlertsEnabled: true,
+      thresholdPercentages: ['200.1250'],
       periodCloseEnabled: true,
     },
   });
@@ -159,6 +163,18 @@ describe('Budget period-close notification producer real acceptance', { retries:
       },
     });
 
+  const updateThresholdPreference = (budgetId: number, preference: NotificationPreference, percentageAlertsEnabled: boolean) =>
+    cy.authenticatedRequest<NotificationPreference>({
+      method: 'PUT',
+      url: `/api/budgets/${budgetId}/notification-preferences`,
+      body: {
+        percentageAlertsEnabled,
+        thresholdPercentages: preference.thresholdPercentages,
+        periodCloseEnabled: preference.periodCloseEnabled,
+        expectedVersion: preference.version,
+      },
+    });
+
   const scheduleLifecycle = (budget: Budget, command: 'pause' | 'finish') =>
     cy.authenticatedRequest({
       method: 'POST',
@@ -202,22 +218,43 @@ describe('Budget period-close notification producer real acceptance', { retries:
         expect(status).to.equal(201);
         return cy
           .authenticatedRequest<Budget>({ method: 'POST', url: '/api/budgets', body: budgetPayload(account.id, category.id) })
-          .then(({ status: budgetStatus }) => {
+          .then(({ body: budget, status: budgetStatus }) => {
             expect(budgetStatus).to.equal(201);
-            return cy
-              .authenticatedRequest({
-                method: 'POST',
-                url: '/api/financial-transactions',
-                body: {
-                  transactionDate: '2026-03-31',
-                  postingDate: '2026-03-31',
-                  description: `Period close actual expense ${fixture}`,
-                  amount: 60,
-                  flow: 'OUT',
-                  origin: 'MANUAL',
-                  account: { id: account.id },
-                  category: { id: category.id },
-                },
+            let closeEnabledSince: string | null;
+            return periodClosePreference(budget.id)
+              .then(preference => {
+                expect(preference.percentageAlertsEnabled).to.equal(true);
+                expect(preference.thresholdPercentages).to.deep.equal(['200.1250']);
+                expect(preference.periodCloseEnabledSince).to.be.a('string');
+                closeEnabledSince = preference.periodCloseEnabledSince;
+                return updateThresholdPreference(budget.id, preference, false);
+              })
+              .then(({ body: disabled, status }) => {
+                expect(status).to.equal(200);
+                expect(disabled.percentageAlertsEnabled).to.equal(false);
+                expect(disabled.thresholdPercentages).to.deep.equal(['200.1250']);
+                expect(disabled.periodCloseEnabledSince).to.equal(closeEnabledSince);
+                return updateThresholdPreference(budget.id, disabled, true);
+              })
+              .then(({ body: reenabled, status }) => {
+                expect(status).to.equal(200);
+                expect(reenabled.percentageAlertsEnabled).to.equal(true);
+                expect(reenabled.thresholdPercentages).to.deep.equal(['200.1250']);
+                expect(reenabled.periodCloseEnabledSince).to.equal(closeEnabledSince);
+                return cy.authenticatedRequest({
+                  method: 'POST',
+                  url: '/api/financial-transactions',
+                  body: {
+                    transactionDate: '2026-03-31',
+                    postingDate: '2026-03-31',
+                    description: `Period close actual expense ${fixture}`,
+                    amount: 60,
+                    flow: 'OUT',
+                    origin: 'MANUAL',
+                    account: { id: account.id },
+                    category: { id: category.id },
+                  },
+                });
               })
               .then(({ status: transactionStatus }) => {
                 expect(transactionStatus).to.equal(201);
@@ -254,7 +291,7 @@ describe('Budget period-close notification producer real acceptance', { retries:
       });
       notificationPage().then(({ body, status: notificationStatus }) => {
         expect(notificationStatus).to.equal(200);
-        const matching = body.notifications.filter(notification => notification.snapshot.logicalEventKey === eventKey);
+        const matching = body.notifications.filter(notification => hasPeriodCloseKey(notification, eventKey));
         expect(matching, 'one logical close after scheduler retries').to.have.length(1);
         expect(matching[0].notificationType).to.equal('PERIOD_CLOSED');
         expect(matching[0].snapshot).to.include({
@@ -270,9 +307,7 @@ describe('Budget period-close notification producer real acceptance', { retries:
             expect(updateStatus).to.equal(200);
             expect(disabled.periodCloseEnabled).to.equal(false);
             return notificationPage().then(({ body: afterDeactivation }) => {
-              expect(
-                afterDeactivation.notifications.filter(notification => notification.snapshot.logicalEventKey === eventKey),
-              ).to.have.length(1);
+              expect(afterDeactivation.notifications.filter(notification => hasPeriodCloseKey(notification, eventKey))).to.have.length(1);
             });
           }),
         );
@@ -419,22 +454,20 @@ describe('Budget period-close notification producer real acceptance', { retries:
       .then(({ body, status }) => {
         expect(status).to.equal(200);
         const recoveryEvents = body.notifications.filter(notification =>
-          notification.snapshot.logicalEventKey.startsWith(`PERIOD_CLOSED:${recoveryId}:`),
+          hasPeriodCloseKeyPrefix(notification, `PERIOD_CLOSED:${recoveryId}:`),
         );
         expect(recoveryEvents.map(notification => notification.snapshot.periodStart)).to.include.members(['2026-03-31', '2026-04-01']);
         expect(new Set(recoveryEvents.map(notification => notification.snapshot.logicalEventKey)).size).to.equal(recoveryEvents.length);
 
-        const onceEvents = body.notifications.filter(notification =>
-          notification.snapshot.logicalEventKey.startsWith(`PERIOD_CLOSED:${onceId}:`),
-        );
+        const onceEvents = body.notifications.filter(notification => hasPeriodCloseKeyPrefix(notification, `PERIOD_CLOSED:${onceId}:`));
         expect(onceEvents).to.have.length(1);
         expect(onceEvents[0].snapshot.periodStart).to.equal('2026-03-31');
 
         expect(
-          body.notifications.filter(notification => notification.snapshot.logicalEventKey === `PERIOD_CLOSED:${finishedId}:2026-03-31`),
+          body.notifications.filter(notification => hasPeriodCloseKey(notification, `PERIOD_CLOSED:${finishedId}:2026-03-31`)),
         ).to.have.length(1);
         expect(
-          body.notifications.filter(notification => notification.snapshot.logicalEventKey === `PERIOD_CLOSED:${pausedId}:2026-04-01`),
+          body.notifications.filter(notification => hasPeriodCloseKey(notification, `PERIOD_CLOSED:${pausedId}:2026-04-01`)),
         ).to.have.length(0);
 
         // A recurring Budget stays editable after a historical close. Turning its preference off must not
@@ -448,9 +481,7 @@ describe('Budget period-close notification producer real acceptance', { retries:
       })
       .then(({ body: afterDeactivation }) => {
         expect(
-          afterDeactivation.notifications.filter(
-            notification => notification.snapshot.logicalEventKey === `PERIOD_CLOSED:${recoveryId}:2026-03-31`,
-          ),
+          afterDeactivation.notifications.filter(notification => hasPeriodCloseKey(notification, `PERIOD_CLOSED:${recoveryId}:2026-03-31`)),
         ).to.have.length(1);
         return cy.login(Cypress.env('E2E_OTHER_USERNAME') ?? 'admin', Cypress.env('E2E_OTHER_PASSWORD') ?? 'admin');
       })
@@ -521,8 +552,8 @@ describe('Budget period-close notification producer real acceptance', { retries:
         notificationPage().then(({ body: notifications, status: notificationStatus }) => {
           expect(notificationStatus).to.equal(200);
           expect(
-            notifications.notifications.filter(
-              notification => notification.snapshot.logicalEventKey === `PERIOD_CLOSED:${budget.budgetId}:2026-03-31`,
+            notifications.notifications.filter(notification =>
+              hasPeriodCloseKey(notification, `PERIOD_CLOSED:${budget.budgetId}:2026-03-31`),
             ),
           ).to.have.length(0);
         });

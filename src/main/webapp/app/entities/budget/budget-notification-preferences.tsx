@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button, Input, Label } from 'reactstrap';
 
 import { BudgetNotificationPreferencesPayload, BudgetType } from './budget-api';
-import { copy } from './budget-utils';
+import { copy, formatBudgetThresholdPercentage } from './budget-utils';
 
 export type BudgetNotificationPreferencesDraft = Pick<
   BudgetNotificationPreferencesPayload,
@@ -15,32 +15,57 @@ export const emptyNotificationPreferences = (): BudgetNotificationPreferencesDra
   periodCloseEnabled: false,
 });
 
-const suggestions = [50, 80, 100];
+const suggestions = ['50', '80', '100'];
+const MAX_THRESHOLD_COUNT = 20;
+const THRESHOLD_PATTERN = /^\d+(?:\.\d{1,4})?$/;
 
-const normalizeCustomThreshold = (value: string): number | null => {
+/**
+ * Canonicalizes a valid plain decimal only for comparison. The caller still retains and transports the exact
+ * trimmed string it received from the user or server, so percentages never travel through JavaScript Number.
+ */
+export const normalizeThresholdPercentage = (value: string): string | null => {
   const trimmed = value.trim();
-  if (!/^\d+(?:\.\d{1,4})?$/.test(trimmed)) return null;
-  const numeric = Number(trimmed);
-  if (!Number.isFinite(numeric) || numeric <= 0 || trimmed.replace('.', '').replace(/^0+/, '').length > 15) return null;
-  return numeric;
+  if (!THRESHOLD_PATTERN.test(trimmed)) return null;
+  const [rawInteger, rawFraction = ''] = trimmed.split('.');
+  const integer = rawInteger.replace(/^0+(?=\d)/, '');
+  const fraction = rawFraction.replace(/0+$/, '');
+  const significantDigits = `${integer}${fraction}`.replace(/^0+/, '');
+  if (!significantDigits || significantDigits.length > 15) return null;
+  return fraction ? `${integer}.${fraction}` : integer;
 };
+
+export const compareThresholdPercentages = (left: string, right: string) => {
+  const normalizedLeft = normalizeThresholdPercentage(left);
+  const normalizedRight = normalizeThresholdPercentage(right);
+  if (normalizedLeft === null || normalizedRight === null) return left.localeCompare(right);
+  const [leftInteger, leftFraction = ''] = normalizedLeft.split('.');
+  const [rightInteger, rightFraction = ''] = normalizedRight.split('.');
+  if (leftInteger.length !== rightInteger.length) return leftInteger.length - rightInteger.length;
+  if (leftInteger !== rightInteger) return leftInteger < rightInteger ? -1 : 1;
+  const paddedLeft = leftFraction.padEnd(4, '0');
+  const paddedRight = rightFraction.padEnd(4, '0');
+  return paddedLeft === paddedRight ? 0 : paddedLeft < paddedRight ? -1 : 1;
+};
+
+const sameThreshold = (left: string, right: string) => {
+  const normalizedLeft = normalizeThresholdPercentage(left);
+  const normalizedRight = normalizeThresholdPercentage(right);
+  return normalizedLeft !== null && normalizedLeft === normalizedRight;
+};
+
+const thresholdError = (locale: string) =>
+  copy(locale, 'Introduce un porcentaje positivo de hasta cuatro decimales.', 'Enter a positive percentage with up to four decimals.');
 
 export const validateNotificationPreferences = (value: BudgetNotificationPreferencesDraft, locale: string): string | null => {
   if (value.percentageAlertsEnabled && !value.thresholdPercentages.length) {
     return copy(locale, 'Agrega al menos un porcentaje para activar las alertas.', 'Add at least one percentage to enable alerts.');
   }
-  if (value.thresholdPercentages.length > 20) {
+  if (value.thresholdPercentages.length > MAX_THRESHOLD_COUNT) {
     return copy(locale, 'Puedes configurar hasta 20 porcentajes.', 'You can configure up to 20 percentages.');
   }
-  const normalized = value.thresholdPercentages.map(item => String(item));
-  if (normalized.some(item => normalizeCustomThreshold(item) === null)) {
-    return copy(
-      locale,
-      'Cada porcentaje debe ser positivo y tener hasta cuatro decimales.',
-      'Each percentage must be positive and use at most four decimals.',
-    );
-  }
-  if (new Set(value.thresholdPercentages.map(item => item.toFixed(4))).size !== value.thresholdPercentages.length) {
+  const normalized = value.thresholdPercentages.map(normalizeThresholdPercentage);
+  if (normalized.some(item => item === null)) return thresholdError(locale);
+  if (new Set(normalized).size !== value.thresholdPercentages.length) {
     return copy(locale, 'Los porcentajes no pueden repetirse.', 'Percentages must be unique.');
   }
   return null;
@@ -63,8 +88,11 @@ export const BudgetNotificationPreferencesEditor = ({
   readOnly?: boolean;
   idPrefix: string;
 }) => {
+  const [addingCustom, setAddingCustom] = useState(false);
   const [customValue, setCustomValue] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
+  const customInput = useRef<HTMLInputElement>(null);
+  const addCustomButton = useRef<HTMLButtonElement>(null);
   const thresholdTitle =
     type === 'EXPENSE' ? copy(locale, 'Alertas de gasto', 'Spending alerts') : copy(locale, 'Alertas de ingresos', 'Income alerts');
   const thresholdDescription =
@@ -79,36 +107,52 @@ export const BudgetNotificationPreferencesEditor = ({
           'Recibe una notificación cuando tus ingresos alcancen determinados porcentajes de la meta.',
           'Receive a notification when income reaches selected percentages of the goal.',
         );
-  const updateThreshold = (index: number, raw: string) => {
-    const parsed = normalizeCustomThreshold(raw);
-    if (parsed === null) return;
-    const next = [...value.thresholdPercentages];
-    next[index] = parsed;
-    onChange({ ...value, thresholdPercentages: next });
-  };
-  const addThreshold = (raw: string) => {
-    const parsed = normalizeCustomThreshold(raw);
-    if (parsed === null) {
-      setCustomError(
-        copy(
-          locale,
-          'Introduce un porcentaje positivo de hasta cuatro decimales.',
-          'Enter a positive percentage with up to four decimals.',
-        ),
-      );
-      return;
-    }
-    if (value.thresholdPercentages.some(existing => existing.toFixed(4) === parsed.toFixed(4))) {
-      setCustomError(copy(locale, 'Este porcentaje ya está configurado.', 'This percentage is already configured.'));
-      return;
-    }
-    if (value.thresholdPercentages.length >= 20) {
-      setCustomError(copy(locale, 'Puedes configurar hasta 20 porcentajes.', 'You can configure up to 20 percentages.'));
-      return;
-    }
-    onChange({ ...value, thresholdPercentages: [...value.thresholdPercentages, parsed].sort((left, right) => left - right) });
+  const configuredCount = value.thresholdPercentages.length;
+  const atMaximum = configuredCount >= MAX_THRESHOLD_COUNT;
+
+  useEffect(() => {
+    if (addingCustom) customInput.current?.focus();
+  }, [addingCustom]);
+
+  const closeCustom = () => {
+    setAddingCustom(false);
     setCustomValue('');
     setCustomError(null);
+    requestAnimationFrame(() => addCustomButton.current?.focus());
+  };
+
+  const removeThreshold = (threshold: string) => {
+    onChange({ ...value, thresholdPercentages: value.thresholdPercentages.filter(item => item !== threshold) });
+  };
+
+  const addThreshold = (raw: string) => {
+    const exact = raw.trim();
+    const normalized = normalizeThresholdPercentage(exact);
+    if (normalized === null) {
+      setCustomError(thresholdError(locale));
+      return false;
+    }
+    if (value.thresholdPercentages.some(existing => sameThreshold(existing, exact))) {
+      setCustomError(copy(locale, 'Este porcentaje ya está configurado.', 'This percentage is already configured.'));
+      return false;
+    }
+    if (atMaximum) {
+      setCustomError(copy(locale, 'Puedes configurar hasta 20 porcentajes.', 'You can configure up to 20 percentages.'));
+      return false;
+    }
+    onChange({ ...value, thresholdPercentages: [...value.thresholdPercentages, exact].sort(compareThresholdPercentages) });
+    setCustomError(null);
+    return true;
+  };
+
+  const toggleSuggestion = (suggestion: string) => {
+    const existing = value.thresholdPercentages.find(threshold => sameThreshold(threshold, suggestion));
+    if (existing) {
+      removeThreshold(existing);
+      setCustomError(null);
+      return;
+    }
+    void addThreshold(suggestion);
   };
 
   if (readOnly) {
@@ -119,10 +163,12 @@ export const BudgetNotificationPreferencesEditor = ({
           <dd className="col-sm-7">
             {value.percentageAlertsEnabled ? copy(locale, 'Activadas', 'Enabled') : copy(locale, 'Desactivadas', 'Disabled')}
           </dd>
-          {value.thresholdPercentages.length ? (
+          {value.percentageAlertsEnabled && value.thresholdPercentages.length ? (
             <>
               <dt className="col-sm-5 text-muted">{copy(locale, 'Porcentajes', 'Percentages')}</dt>
-              <dd className="col-sm-7">{value.thresholdPercentages.map(item => `${item}%`).join(', ')}</dd>
+              <dd className="col-sm-7">
+                {value.thresholdPercentages.map(item => formatBudgetThresholdPercentage(item, locale)).join(', ')}
+              </dd>
             </>
           ) : null}
           <dt className="col-sm-5 text-muted">{copy(locale, 'Resumen al cerrar el período', 'Period-close summary')}</dt>
@@ -158,94 +204,123 @@ export const BudgetNotificationPreferencesEditor = ({
             </Label>
           </div>
         </div>
-        {/* Keep the draft editable while alerts are off. Selecting a value is not activation; only the independent
-            switch controls whether the server evaluates threshold crossings. */}
-        <fieldset disabled={disabled} className="mt-3">
-          <legend className="visually-hidden">{thresholdTitle}</legend>
-          <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
-            <span className="small text-muted me-1">{copy(locale, 'Sugerencias:', 'Suggestions:')}</span>
-            {suggestions.map(suggestion => (
+
+        {value.percentageAlertsEnabled ? (
+          <fieldset disabled={disabled} className="mt-3" data-cy={`${idPrefix}ThresholdSelector`}>
+            <legend className="small fw-semibold mb-2">{copy(locale, 'Avísame cuando alcance:', 'Notify me when it reaches:')}</legend>
+            <div className="d-flex flex-wrap align-items-center gap-2">
+              {suggestions.map(suggestion => {
+                const selected = value.thresholdPercentages.some(threshold => sameThreshold(threshold, suggestion));
+                return (
+                  <Button
+                    key={suggestion}
+                    type="button"
+                    size="sm"
+                    color={selected ? 'primary' : 'secondary'}
+                    outline={!selected}
+                    aria-pressed={selected}
+                    onClick={() => toggleSuggestion(suggestion)}
+                    data-cy={`${idPrefix}Suggestion${suggestion}`}
+                  >
+                    {formatBudgetThresholdPercentage(suggestion, locale)}
+                    {selected ? ' ✓' : ''}
+                  </Button>
+                );
+              })}
+              {value.thresholdPercentages
+                .filter(threshold => !suggestions.some(suggestion => sameThreshold(threshold, suggestion)))
+                .map(threshold => (
+                  <Button
+                    key={threshold}
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    outline
+                    onClick={() => removeThreshold(threshold)}
+                    aria-label={copy(
+                      locale,
+                      `Quitar ${formatBudgetThresholdPercentage(threshold, locale)}`,
+                      `Remove ${formatBudgetThresholdPercentage(threshold, locale)}`,
+                    )}
+                    data-cy={`${idPrefix}CustomChip`}
+                  >
+                    {formatBudgetThresholdPercentage(threshold, locale)} <span aria-hidden="true">×</span>
+                  </Button>
+                ))}
               <Button
-                key={suggestion}
+                innerRef={addCustomButton}
                 type="button"
                 size="sm"
                 color="secondary"
                 outline
-                onClick={() => addThreshold(String(suggestion))}
-                data-cy={`${idPrefix}Suggestion${suggestion}`}
-              >
-                {suggestion}%
-              </Button>
-            ))}
-          </div>
-          {value.thresholdPercentages.length ? (
-            <div className="row g-2 mb-3" aria-label={copy(locale, 'Porcentajes configurados', 'Configured percentages')}>
-              {value.thresholdPercentages.map((threshold, index) => (
-                <div className="col-12 col-sm-6 col-lg-4" key={`${threshold}-${index}`}>
-                  <div className="input-group input-group-sm">
-                    <Input
-                      aria-label={copy(locale, `Porcentaje ${index + 1}`, `Percentage ${index + 1}`)}
-                      type="number"
-                      min="0.0001"
-                      step="0.0001"
-                      inputMode="decimal"
-                      value={threshold}
-                      onChange={event => updateThreshold(index, event.target.value)}
-                      data-cy={`${idPrefix}Threshold-${index}`}
-                    />
-                    <span className="input-group-text">%</span>
-                    <Button
-                      type="button"
-                      color="secondary"
-                      outline
-                      onClick={() =>
-                        onChange({ ...value, thresholdPercentages: value.thresholdPercentages.filter((_, item) => item !== index) })
-                      }
-                      aria-label={copy(locale, `Quitar ${threshold}%`, `Remove ${threshold}%`)}
-                      data-cy={`${idPrefix}RemoveThreshold-${index}`}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="small text-muted mb-3">
-              {copy(locale, 'Aún no has elegido porcentajes.', 'You have not selected percentages yet.')}
-            </p>
-          )}
-          <div className="row g-2 align-items-end">
-            <div className="col-12 col-sm-5">
-              <Label for={`${idPrefix}-custom-threshold`} className="small mb-1">
-                {copy(locale, 'Porcentaje personalizado', 'Custom percentage')}
-              </Label>
-              <Input
-                id={`${idPrefix}-custom-threshold`}
-                type="number"
-                min="0.0001"
-                step="0.0001"
-                inputMode="decimal"
-                value={customValue}
-                onChange={event => {
-                  setCustomValue(event.target.value);
+                onClick={() => {
+                  setAddingCustom(true);
                   setCustomError(null);
                 }}
-                data-cy={`${idPrefix}CustomThreshold`}
-              />
-            </div>
-            <div className="col-12 col-sm-auto">
-              <Button type="button" color="secondary" outline onClick={() => addThreshold(customValue)} data-cy={`${idPrefix}AddThreshold`}>
-                {copy(locale, 'Añadir porcentaje', 'Add percentage')}
+                disabled={atMaximum}
+                data-cy={`${idPrefix}OpenCustomThreshold`}
+              >
+                + {copy(locale, 'Añadir porcentaje', 'Add percentage')}
               </Button>
             </div>
-          </div>
-          {customError ? (
-            <div className="invalid-feedback d-block" role="alert">
-              {customError}
-            </div>
-          ) : null}
-        </fieldset>
+            <p className="small text-muted mt-2 mb-0" data-cy={`${idPrefix}ThresholdCount`}>
+              {copy(
+                locale,
+                `${configuredCount} de ${MAX_THRESHOLD_COUNT} porcentajes configurados.`,
+                `${configuredCount} of ${MAX_THRESHOLD_COUNT} percentages configured.`,
+              )}
+              {atMaximum ? ` ${copy(locale, 'Quita uno para añadir otro.', 'Remove one before adding another.')}` : ''}
+            </p>
+            {!configuredCount ? (
+              <p className="small text-muted mb-0">
+                {copy(locale, 'Aún no has elegido porcentajes.', 'You have not selected percentages yet.')}
+              </p>
+            ) : null}
+            {addingCustom ? (
+              <div className="row g-2 align-items-end mt-2" data-cy={`${idPrefix}CustomThresholdForm`}>
+                <div className="col-12 col-sm-5">
+                  <Label for={`${idPrefix}-custom-threshold`} className="small mb-1">
+                    {copy(locale, 'Porcentaje personalizado', 'Custom percentage')}
+                  </Label>
+                  <Input
+                    innerRef={customInput}
+                    id={`${idPrefix}-custom-threshold`}
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={customValue}
+                    onChange={event => {
+                      setCustomValue(event.target.value);
+                      setCustomError(null);
+                    }}
+                    aria-describedby={customError ? `${idPrefix}-custom-threshold-error` : undefined}
+                    data-cy={`${idPrefix}CustomThreshold`}
+                  />
+                </div>
+                <div className="col-12 col-sm-auto d-flex gap-2">
+                  <Button
+                    type="button"
+                    color="primary"
+                    onClick={() => {
+                      if (addThreshold(customValue)) closeCustom();
+                    }}
+                    data-cy={`${idPrefix}AddThreshold`}
+                  >
+                    {copy(locale, 'Añadir', 'Add')}
+                  </Button>
+                  <Button type="button" color="secondary" outline onClick={closeCustom} data-cy={`${idPrefix}CancelCustomThreshold`}>
+                    {copy(locale, 'Cancelar', 'Cancel')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {customError ? (
+              <div id={`${idPrefix}-custom-threshold-error`} className="invalid-feedback d-block" role="alert">
+                {customError}
+              </div>
+            ) : null}
+          </fieldset>
+        ) : null}
       </section>
 
       <section aria-labelledby={`${idPrefix}-period-close-title`}>

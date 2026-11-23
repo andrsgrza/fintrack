@@ -27,6 +27,7 @@ import {
   copy,
   dateRange,
   formatBudgetAmount,
+  formatBudgetThresholdPercentage,
   userFacingError,
 } from './budget-utils';
 
@@ -1164,8 +1165,8 @@ const BudgetCreate = () => {
                 <strong>{copy(locale, 'Notificaciones', 'Notifications')}:</strong>{' '}
                 {copy(
                   locale,
-                  `${notificationPreferences.percentageAlertsEnabled ? `Alertas de ${type === 'EXPENSE' ? 'gasto' : 'ingresos'}: ${notificationPreferences.thresholdPercentages.map(value => `${value}%`).join(', ') || 'sin porcentajes'}` : 'Alertas de porcentaje desactivadas'}; resumen al cerrar: ${notificationPreferences.periodCloseEnabled ? 'activado' : 'desactivado'}.`,
-                  `${notificationPreferences.percentageAlertsEnabled ? `${type === 'EXPENSE' ? 'Spending' : 'Income'} alerts: ${notificationPreferences.thresholdPercentages.map(value => `${value}%`).join(', ') || 'no percentages'}` : 'Percentage alerts disabled'}; period-close summary: ${notificationPreferences.periodCloseEnabled ? 'enabled' : 'disabled'}.`,
+                  `${notificationPreferences.percentageAlertsEnabled ? `Alertas de ${type === 'EXPENSE' ? 'gasto' : 'ingresos'}: ${notificationPreferences.thresholdPercentages.map(value => formatBudgetThresholdPercentage(value, locale)).join(', ') || 'sin porcentajes'}` : 'Alertas de porcentaje desactivadas'}; resumen al cerrar: ${notificationPreferences.periodCloseEnabled ? 'activado' : 'desactivado'}.`,
+                  `${notificationPreferences.percentageAlertsEnabled ? `${type === 'EXPENSE' ? 'Spending' : 'Income'} alerts: ${notificationPreferences.thresholdPercentages.map(value => formatBudgetThresholdPercentage(value, locale)).join(', ') || 'no percentages'}` : 'Percentage alerts disabled'}; period-close summary: ${notificationPreferences.periodCloseEnabled ? 'enabled' : 'disabled'}.`,
                 )}
               </div>
             </div>

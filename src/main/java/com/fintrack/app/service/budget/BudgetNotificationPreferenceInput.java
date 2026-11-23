@@ -1,5 +1,6 @@
 package com.fintrack.app.service.budget;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.math.BigDecimal;
 import java.util.Set;
 
@@ -9,6 +10,6 @@ import java.util.Set;
  */
 public record BudgetNotificationPreferenceInput(
     Boolean percentageAlertsEnabled,
-    Set<BigDecimal> thresholdPercentages,
+    @JsonDeserialize(contentUsing = BudgetDecimalJson.ThresholdPercentageDeserializer.class) Set<BigDecimal> thresholdPercentages,
     Boolean periodCloseEnabled
 ) {}

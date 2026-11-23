@@ -154,7 +154,8 @@ export type BudgetCreatePayload = {
 /** Mutable delivery settings; they never alter the saved financial revision or semantic calculation. */
 export type BudgetNotificationPreferencesPayload = {
   percentageAlertsEnabled: boolean;
-  thresholdPercentages: number[];
+  /** Exact plain-decimal percentages. Never coerce these values through JavaScript Number. */
+  thresholdPercentages: BudgetDecimal[];
   periodCloseEnabled: boolean;
   expectedVersion?: number | null;
 };
@@ -164,7 +165,7 @@ export type BudgetNotificationPreferences = {
   configured: boolean;
   version: number | null;
   percentageAlertsEnabled: boolean;
-  thresholdPercentages: number[];
+  thresholdPercentages: BudgetDecimal[];
   periodCloseEnabled: boolean;
   periodCloseEnabledSince: string | null;
   updatedAt: string | null;

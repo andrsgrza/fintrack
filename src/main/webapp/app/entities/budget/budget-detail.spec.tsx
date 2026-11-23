@@ -298,7 +298,7 @@ describe('BudgetDetail', () => {
         expect.objectContaining({
           expectedVersion: 3,
           percentageAlertsEnabled: true,
-          thresholdPercentages: [50],
+          thresholdPercentages: ['50'],
           periodCloseEnabled: true,
         }),
       ),

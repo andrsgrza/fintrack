@@ -10,7 +10,7 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
     configured: boolean;
     version: number | null;
     percentageAlertsEnabled: boolean;
-    thresholdPercentages: number[];
+    thresholdPercentages: string[];
     periodCloseEnabled: boolean;
     periodCloseEnabledSince: string | null;
   };
@@ -31,7 +31,7 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
 
   const preferences = {
     percentageAlertsEnabled: true,
-    thresholdPercentages: [50],
+    thresholdPercentages: ['50'],
     periodCloseEnabled: true,
   };
 
@@ -122,12 +122,12 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
             return cy.authenticatedRequest<Preference>({
               method: 'PUT',
               url: `/api/budgets/${finishedBudget.id}/notification-preferences`,
-              body: { ...preferences, thresholdPercentages: [50, 70], expectedVersion: body.version },
+              body: { ...preferences, thresholdPercentages: ['50', '70'], expectedVersion: body.version },
             });
           })
           .then(({ body, status }) => {
             expect(status).to.equal(200);
-            expect(body.thresholdPercentages).to.deep.equal([50, 70]);
+            expect(body.thresholdPercentages).to.deep.equal(['50.0000', '70.0000']);
           });
       });
     });
@@ -145,13 +145,14 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
       .invoke('text')
       .should('match', /Paused|Pausado/);
     cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('be.enabled');
+    cy.get('[data-cy="budgetDetailNotificationOpenCustomThreshold"]').click();
     cy.get('[data-cy="budgetDetailNotificationCustomThreshold"]').type('80');
     cy.get('[data-cy="budgetDetailNotificationAddThreshold"]').click();
     cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('be.checked').click();
     cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
     cy.wait('@savePausedPreferences').then(({ response }) => expect(response?.statusCode).to.equal(200));
     cy.reload();
-    cy.get('[data-cy="budgetDetailNotificationThreshold-1"]').should('have.value', '80');
+    cy.get('[data-cy="budgetDetailNotificationSuggestion80"]').should('have.attr', 'aria-pressed', 'true');
     cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('not.be.checked');
 
     findBudget(finishedBudgetName).then(finished => {
@@ -170,7 +171,7 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
               method: 'PUT',
               url: `/api/budgets/${finished.budgetId}/notification-preferences`,
               failOnStatusCode: false,
-              body: { ...preferences, thresholdPercentages: [99], expectedVersion: before.version },
+              body: { ...preferences, thresholdPercentages: ['99'], expectedVersion: before.version },
             })
             .then(response => ({ before, response }));
         })
@@ -209,7 +210,7 @@ describe('Budget notification preferences lifecycle and ownership acceptance', {
             method: 'PUT',
             url: `/api/budgets/${created.id}/notification-preferences`,
             failOnStatusCode: false,
-            body: { ...preferences, thresholdPercentages: [99], expectedVersion: ownerPreference.version },
+            body: { ...preferences, thresholdPercentages: ['99'], expectedVersion: ownerPreference.version },
           }).then(response => {
             expect(response.status).to.equal(400);
             expect(response.body.code).to.equal('INVALID_PAYLOAD');

@@ -26,7 +26,7 @@ describe('Budget financial time zone complete real acceptance', { retries: 0 }, 
     configured: boolean;
     version: number | null;
     percentageAlertsEnabled: boolean;
-    thresholdPercentages: number[];
+    thresholdPercentages: string[];
     periodCloseEnabled: boolean;
     periodCloseEnabledSince: string | null;
   };

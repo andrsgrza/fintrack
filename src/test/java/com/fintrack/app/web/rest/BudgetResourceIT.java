@@ -258,6 +258,8 @@ class BudgetResourceIT {
             .andExpect(jsonPath("$.configured").value(true))
             .andExpect(jsonPath("$.percentageAlertsEnabled").value(true))
             .andExpect(jsonPath("$.thresholdPercentages.length()").value(2))
+            .andExpect(jsonPath("$.thresholdPercentages[0]").value("50.0000"))
+            .andExpect(jsonPath("$.thresholdPercentages[1]").value("100.0000"))
             .andReturn()
             .getResponse()
             .getContentAsString();
@@ -283,6 +285,22 @@ class BudgetResourceIT {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.thresholdPercentages.length()").value(2))
             .andExpect(jsonPath("$.periodCloseEnabledSince").doesNotExist());
+
+        // The public preference contract transports thresholds as exact JSON strings. Existing numeric clients are
+        // still accepted by the command deserializer, but the current UI must never round-trip through a double.
+        restBudgetMockMvc
+            .perform(
+                put("/api/budgets/{id}/notification-preferences", budget.getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
+                        {"expectedVersion":%d,"percentageAlertsEnabled":true,"thresholdPercentages":["87.1250"],"periodCloseEnabled":true}
+                        """.formatted(version)
+                    )
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.thresholdPercentages[0]").value("87.1250"))
+            .andExpect(jsonPath("$.periodCloseEnabled").value(true));
 
         BudgetNotificationPreferenceUpdateCommand stale = new BudgetNotificationPreferenceUpdateCommand(
             99L,

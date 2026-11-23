@@ -8,7 +8,7 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
     configured: boolean;
     version: number | null;
     percentageAlertsEnabled: boolean;
-    thresholdPercentages: number[];
+    thresholdPercentages: string[];
     periodCloseEnabled: boolean;
     periodCloseEnabledSince: string | null;
   };
@@ -34,12 +34,16 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
     cy.get('[data-cy="budgetIntervalUnit"]').select('MONTH');
     cy.get('[data-cy="budgetCreateNotificationThresholdEnabled"]').should('not.be.checked');
     cy.get('[data-cy="budgetCreateNotificationPeriodCloseEnabled"]').should('not.be.checked');
+    cy.get('[data-cy="budgetCreateNotificationThresholdSelector"]').should('not.exist');
     cy.contains('h3', /Spending alerts|Alertas de gasto/).should('be.visible');
 
     cy.get('[data-cy="budgetCreateNotificationThresholdEnabled"]').click();
+    cy.get('[data-cy="budgetCreateNotificationThresholdSelector"]').should('be.visible');
     cy.get('[data-cy="budgetCreateNotificationSuggestion50"]').click();
+    cy.get('[data-cy="budgetCreateNotificationSuggestion50"]').should('have.attr', 'aria-pressed', 'true');
     cy.get('[data-cy="budgetCreateNotificationSuggestion80"]').click();
-    cy.get('[data-cy="budgetCreateNotificationCustomThreshold"]').type('100.125');
+    cy.get('[data-cy="budgetCreateNotificationOpenCustomThreshold"]').click();
+    cy.get('[data-cy="budgetCreateNotificationCustomThreshold"]').type('100.1250');
     cy.get('[data-cy="budgetCreateNotificationAddThreshold"]').click();
     cy.get('[data-cy="budgetCreateNotificationPeriodCloseEnabled"]').click();
     cy.get('[data-cy="submitBudget"]').click();
@@ -48,7 +52,7 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
       expect(response?.statusCode).to.equal(201);
       expect(request.body.notificationPreferences).to.deep.equal({
         percentageAlertsEnabled: true,
-        thresholdPercentages: [50, 80, 100.125],
+        thresholdPercentages: ['50', '80', '100.1250'],
         periodCloseEnabled: true,
       });
       const budgetId = (response?.body as BudgetReference).id;
@@ -62,7 +66,7 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
         ({ body, status }) => {
           expect(status).to.equal(200);
           expect(body).to.include({ configured: true, percentageAlertsEnabled: true, periodCloseEnabled: true });
-          expect(body.thresholdPercentages).to.deep.equal([50, 80, 100.125]);
+          expect(body.thresholdPercentages).to.deep.equal(['50.0000', '80.0000', '100.1250']);
           expect(body.periodCloseEnabledSince).to.be.a('string');
         },
       );
@@ -73,7 +77,21 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
         },
       );
 
-      // OFF cancels the active episode. Saving preferences itself has no notification-producing endpoint.
+      // OFF cancels the active threshold episode but retains the exact stored values. Saving preferences itself has
+      // no notification-producing endpoint.
+      cy.get('[data-cy="budgetDetailNotificationThresholdEnabled"]').click();
+      cy.get('[data-cy="budgetDetailNotificationThresholdSelector"]').should('not.exist');
+      cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
+      cy.wait('@savePreferences').then(({ request, response }) => {
+        expect(request.body.percentageAlertsEnabled).to.equal(false);
+        expect(request.body.thresholdPercentages).to.deep.equal(['50.0000', '80.0000', '100.1250']);
+        expect(response?.statusCode).to.equal(200);
+      });
+      cy.get('[data-cy="budgetDetailNotificationThresholdEnabled"]').click();
+      cy.get('[data-cy="budgetDetailNotificationThresholdSelector"]').should('be.visible');
+      cy.contains('[data-cy="budgetDetailNotificationCustomChip"]', '100.125%').should('be.visible');
+
+      // OFF cancels the active period-close episode. Saving preferences itself has no notification-producing endpoint.
       cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').click();
       cy.get('[data-cy="saveBudgetNotificationPreferences"]').click();
       cy.wait('@savePreferences').then(({ request, response }) => {
@@ -94,8 +112,13 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
       cy.reload();
       cy.wait('@loadPreferences').its('response.statusCode').should('eq', 200);
       cy.get('[data-cy="budgetDetailNotificationPeriodCloseEnabled"]').should('be.checked');
-      cy.get('[data-cy="budgetNotificationPreferencesSection"]').scrollIntoView();
-      cy.get('[data-cy="budgetNotificationPreferencesSection"]').should('be.visible');
+      cy.get('[data-cy="budgetDetailNotificationEditor"] section')
+        .first()
+        .should('be.visible')
+        .then($section => {
+          cy.window().then(window => window.scrollTo(0, window.scrollY + $section[0].getBoundingClientRect().top - 12));
+        });
+      cy.window().its('scrollY').should('be.greaterThan', 100);
       cy.screenshot('budget-notification-preferences-desktop', { capture: 'viewport' });
       cy.authenticatedRequest<NotificationPage>({ method: 'GET', url: '/api/notifications', qs: { page: 0, size: 1 } }).then(
         ({ body, status }) => {
@@ -109,8 +132,63 @@ describe('Budget notification preferences real acceptance', { retries: 0 }, () =
       cy.get('#budget-type').select('INCOME');
       cy.contains('h3', /Income alerts|Alertas de ingresos/).should('be.visible');
       cy.viewport(390, 844);
-      cy.get('[data-cy="budgetCreateNotificationEditor"]').scrollIntoView();
+      cy.get('[data-cy="budgetCreateNotificationThresholdEnabled"]').click();
+      cy.get('[data-cy="budgetCreateNotificationSuggestion50"]').click();
       cy.get('[data-cy="budgetCreateNotificationEditor"]').should('be.visible').screenshot('budget-notification-preferences-mobile');
     });
+  });
+
+  it('renders a completed Budget preference summary as read-only', () => {
+    const budgetName = `Completed notification preferences ${suffix}`;
+    cy.login(username, password);
+    cy.authenticatedRequest<BudgetReference>({
+      method: 'POST',
+      url: '/api/budgets',
+      body: {
+        name: budgetName,
+        description: 'Finished Budget notification UI fixture',
+        type: 'EXPENSE',
+        currency: 'MXN',
+        clientRequestId: `finished-preferences-${suffix}`,
+        timeZone: 'America/Mexico_City',
+        initialRevision: {
+          targetAmount: '100.00',
+          intervalCount: 1,
+          intervalUnit: 'DAY',
+          alignment: 'ANCHORED',
+          anchorDate: '2026-11-18',
+          customDayOfMonth: null,
+          recurrenceMode: 'ONCE',
+          termination: 'NONE',
+          terminationPeriodCount: null,
+          recurrenceEndDate: null,
+          accountScopeMode: 'ALL',
+          accountIds: [],
+          categoryScopeMode: 'ALL',
+          categoryIds: [],
+          tagScopeMode: 'NONE',
+          tagIds: [],
+          tagMatchMode: 'ANY',
+        },
+        notificationPreferences: {
+          percentageAlertsEnabled: true,
+          thresholdPercentages: ['50', '87.1250'],
+          periodCloseEnabled: true,
+        },
+      },
+    }).then(({ body, status }) => {
+      expect(status).to.equal(201);
+      cy.visit(`/budgets/${body.id}?referenceDate=2026-11-19`);
+    });
+
+    cy.get('[data-cy="budgetDetailNotificationReadOnly"]').should('be.visible').and('contain.text', '87.125%');
+    cy.get('[data-cy="saveBudgetNotificationPreferences"]').should('not.exist');
+    cy.get('[data-cy="budgetDetailNotificationReadOnly"] dl')
+      .should('be.visible')
+      .then($summary => {
+        cy.window().then(window => window.scrollTo(0, window.scrollY + $summary[0].getBoundingClientRect().top - 12));
+      });
+    cy.window().its('scrollY').should('be.greaterThan', 100);
+    cy.screenshot('budget-notification-preferences-finished', { capture: 'viewport' });
   });
 });

@@ -96,6 +96,13 @@ export const formatBudgetPercentage = (value: string | null | undefined, locale:
   return decimal === null ? '—' : `${decimal}%`;
 };
 
+/** Displays a configured alert threshold without inventing insignificant decimal places. */
+export const formatBudgetThresholdPercentage = (value: string | null | undefined, locale: string) => {
+  if (value === null || value === undefined) return '—';
+  const decimal = localizedDecimal(value, locale, 0);
+  return decimal === null ? '—' : `${decimal}%`;
+};
+
 /** The bar is bounded visually, while aria-valuetext and visible copy retain the actual server-calculated percentage. */
 export const boundedBudgetProgress = (value: string | null | undefined): number | null => {
   if (!value || !isBudgetDecimal(value)) return null;

@@ -58,4 +58,33 @@ public final class BudgetDecimalJson {
             }
         }
     }
+
+    /**
+     * Thresholds use the same lossless plain-decimal transport as Budget amounts, while retaining a specific
+     * validation message for this independent notification-preference contract. Numeric literals remain accepted
+     * only for older API clients; all current Budget UI clients send strings.
+     */
+    public static final class ThresholdPercentageDeserializer extends JsonDeserializer<BigDecimal> {
+
+        @Override
+        public BigDecimal deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            if (parser.currentToken() == JsonToken.VALUE_NULL) return null;
+            if (parser.currentToken() != JsonToken.VALUE_STRING && !parser.currentToken().isNumeric()) {
+                throw context.weirdStringException(
+                    parser.getValueAsString(),
+                    BigDecimal.class,
+                    "threshold percentage must be a plain decimal."
+                );
+            }
+            String raw = parser.getText();
+            if (raw == null || !PLAIN_DECIMAL.matcher(raw).matches()) {
+                throw context.weirdStringException(raw, BigDecimal.class, "threshold percentage must be a plain decimal.");
+            }
+            try {
+                return new BigDecimal(raw);
+            } catch (NumberFormatException exception) {
+                throw context.weirdStringException(raw, BigDecimal.class, "threshold percentage must be a valid decimal.");
+            }
+        }
+    }
 }

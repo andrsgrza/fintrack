@@ -253,9 +253,11 @@ describe('BudgetCreate', () => {
 
     expect(screen.getByRole('heading', { name: 'Spending alerts' })).toBeTruthy();
     expect((byCy('budgetCreateNotificationThresholdEnabled') as HTMLInputElement).checked).toBe(false);
+    expect(byCy('budgetCreateNotificationThresholdSelector')).toBeNull();
     fireEvent.click(byCy('budgetCreateNotificationThresholdEnabled'));
     fireEvent.click(byCy('budgetCreateNotificationSuggestion50'));
     fireEvent.click(byCy('budgetCreateNotificationSuggestion80'));
+    fireEvent.click(byCy('budgetCreateNotificationOpenCustomThreshold'));
     fireEvent.change(byCy('budgetCreateNotificationCustomThreshold'), { target: { value: '100.125' } });
     fireEvent.click(byCy('budgetCreateNotificationAddThreshold'));
     fireEvent.click(byCy('budgetCreateNotificationPeriodCloseEnabled'));
@@ -264,7 +266,7 @@ describe('BudgetCreate', () => {
     await waitFor(() => expect(mockCreateBudget).toHaveBeenCalledTimes(1));
     expect(mockCreateBudget.mock.calls[0][0].notificationPreferences).toEqual({
       percentageAlertsEnabled: true,
-      thresholdPercentages: [50, 80, 100.125],
+      thresholdPercentages: ['50', '80', '100.125'],
       periodCloseEnabled: true,
     });
   });
