@@ -12,6 +12,7 @@ import {
   getBudgetOverview,
   cancelBudgetPause,
   getBudgetNotificationPreferences,
+  previewBudgetScope,
 } from './budget-api';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -31,6 +32,7 @@ jest.mock('./budget-api', () => ({
   requestBudgetFinish: jest.fn(),
   deleteBudget: jest.fn(),
   getBudgetNotificationPreferences: jest.fn(),
+  previewBudgetScope: jest.fn(),
 }));
 jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
   getSelectableFinancialAccounts: jest.fn(),
@@ -46,6 +48,7 @@ const mockCurrentEvaluation = getBudgetCurrentEvaluation as jest.Mock;
 const mockOperationalPeriods = getBudgetOperationalPeriods as jest.Mock;
 const mockCancelPause = cancelBudgetPause as jest.Mock;
 const mockNotificationPreferences = getBudgetNotificationPreferences as jest.Mock;
+const mockPreviewBudgetScope = previewBudgetScope as jest.Mock;
 const mockAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockCategories = getSelectableCategories as jest.Mock;
 const mockTags = getSelectableTags as jest.Mock;
@@ -157,6 +160,13 @@ describe('BudgetDetail', () => {
     mockAccounts.mockResolvedValue([{ id: 41, name: 'Cash card', accountType: 'DEBIT', currency: 'MXN', active: true }]);
     mockCategories.mockResolvedValue([{ id: 51, name: 'Food', categoryType: 'EXPENSE', active: true }]);
     mockTags.mockResolvedValue([{ id: 61, name: 'Essential', active: true }]);
+    mockPreviewBudgetScope.mockResolvedValue({
+      unrestricted: false,
+      selectedCategories: [{ id: 51, name: 'Food', color: null, active: true, path: ['Food'], categoryType: 'EXPENSE' }],
+      effectiveCategories: [{ id: 51, name: 'Food', color: null, active: true, path: ['Food'], categoryType: 'EXPENSE' }],
+      missingCategoryIds: [],
+      incompatibleCategoryIds: [],
+    });
   });
 
   it('loads the selected historical period, its effective revision, and readable scope names', async () => {
@@ -166,7 +176,7 @@ describe('BudgetDetail', () => {
     await waitFor(() => expect(byCy('budgetDetailActual')).toBeTruthy());
     expect(byCy('budgetDetailActual').textContent).toMatch(/125\.00/);
     expect(await screen.findByText('Revision 1')).toBeTruthy();
-    expect(await screen.findByText('Cash card')).toBeTruthy();
+    expect(await screen.findByText(/Cash card/)).toBeTruthy();
     expect(byCy('budgetScopeSummary').textContent).toContain('Cash card');
     expect(byCy('budgetScopeSummary').textContent).toContain('Food');
     expect(byCy('budgetScopeSummary').textContent).toContain('Essential');

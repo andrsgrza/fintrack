@@ -165,7 +165,7 @@ public class BudgetSemanticQueryCompiler {
                     category ->
                         category.getId() == null ||
                         !sameOwner(budget, category.getUser()) ||
-                        !compatibleCategory(category, budget.getType())
+                        !BudgetCategoryCompatibility.supports(category.getCategoryType(), budget.getType())
                 )
         ) {
             return failed(
@@ -211,14 +211,6 @@ public class BudgetSemanticQueryCompiler {
                 List.of(type == BudgetType.EXPENSE ? "OUT" : "IN")
             ),
             new SemanticPredicate(SemanticField.TRANSFER_LINK_STATUS, SemanticPredicateOperator.EQUALS, List.of("UNLINKED"))
-        );
-    }
-
-    private boolean compatibleCategory(Category category, BudgetType type) {
-        return (
-            category.getCategoryType() == CategoryType.BOTH ||
-            (type == BudgetType.EXPENSE && category.getCategoryType() == CategoryType.EXPENSE) ||
-            (type == BudgetType.INCOME && category.getCategoryType() == CategoryType.INCOME)
         );
     }
 

@@ -215,6 +215,7 @@ describe('Budget overview and creation real acceptance', () => {
       }
     });
     cy.intercept('POST', '/api/budgets').as('createBudget');
+    cy.intercept('POST', '/api/budgets/scope-preview').as('scopePreview');
     cy.intercept('GET', '/api/budgets/overview*').as('budgetOverview');
   });
 
@@ -250,6 +251,30 @@ describe('Budget overview and creation real acceptance', () => {
       .find('label')
       .filter((_, label) => label.textContent?.trim() === `Budget root ${suffix}`)
       .click();
+    cy.wait('@scopePreview').then(({ request, response }) => {
+      expect(request.body).to.deep.equal({ type: 'EXPENSE', categoryIds: [rootCategory.id] });
+      expect(response?.statusCode).to.equal(200);
+      expect(response?.body).to.include({ unrestricted: false });
+      expect(response?.body.selectedCategories).to.have.length(1);
+      expect(response?.body.effectiveCategories).to.have.length(2);
+      expect(response?.body.effectiveCategories.map((category: Reference) => category.id)).to.include.members([
+        rootCategory.id,
+        childCategory.id,
+      ]);
+    });
+    cy.get('[data-cy="budgetCreateFinancialScopeReview"]')
+      .should('contain.text', `Budget root ${suffix}`)
+      .invoke('text')
+      .should('match', /1 (selected category|categoría seleccionada)/)
+      .and('match', /2 (included categories|categorías incluidas)/)
+      .and('match', /(current hierarchy|jerarquía vigente)/);
+    cy.get('[data-cy="budgetCreateFinancialScopeReview"] summary').click();
+    cy.get('[data-cy="budgetCreateFinancialScopeReview"]').should('contain.text', `Budget child ${suffix}`);
+    cy.screenshot('budget-ux-3-create-review-desktop', { capture: 'fullPage' });
+    cy.viewport('iphone-6');
+    cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(375));
+    cy.screenshot('budget-ux-3-create-review-mobile', { capture: 'fullPage' });
+    cy.viewport(1440, 960);
     cy.get('input[name="tagScope"]').eq(1).check();
     cy.get('[data-cy="budgetTagSelectorAdd"]').click();
     cy.get('[data-cy="budgetTagSelectorOption"]').contains(`Budget tag ${suffix}`).click();
@@ -277,6 +302,8 @@ describe('Budget overview and creation real acceptance', () => {
     cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget browser account ${suffix}`);
     cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget root ${suffix}`);
     cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget tag ${suffix}`);
+    cy.get('[data-cy="budgetEffectiveCategories"] summary').click();
+    cy.get('[data-cy="budgetScopeSummary"]').should('contain.text', `Budget child ${suffix}`);
     cy.get('[data-cy="budgetPeriodHistory"]').should('be.visible');
     cy.document().then(document => expect(document.documentElement.scrollWidth).to.be.lte(document.documentElement.clientWidth));
     cy.screenshot('budget-5b-a-detail-desktop', { capture: 'fullPage' });

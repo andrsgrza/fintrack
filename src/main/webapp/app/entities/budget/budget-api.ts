@@ -131,6 +131,24 @@ export type CalendarPreviewDraft = {
   recurrenceEndDate: string | null;
 };
 
+/** Current server-resolved expansion of selected category roots. It is a read-only review aid, never saved in a Budget revision. */
+export type BudgetScopePreview = {
+  unrestricted: boolean;
+  selectedCategories: BudgetScopePreviewCategory[];
+  effectiveCategories: BudgetScopePreviewCategory[];
+  missingCategoryIds: number[];
+  incompatibleCategoryIds: number[];
+};
+
+export type BudgetScopePreviewCategory = {
+  id: number;
+  name: string;
+  color: string | null;
+  active: boolean | null;
+  path: string[];
+  categoryType: string | null;
+};
+
 export type BudgetCreatePayload = {
   name: string;
   description: string | null;
@@ -209,6 +227,11 @@ export const previewBudgetCalendar = async (
   signal?: AbortSignal,
 ): Promise<{ localToday: string; periods: BudgetPeriod[] }> => {
   const response = await axios.post<{ localToday: string; periods: BudgetPeriod[] }>('api/budgets/calendar-preview', draft, { signal });
+  return response.data;
+};
+
+export const previewBudgetScope = async (type: BudgetType, categoryIds: number[], signal?: AbortSignal): Promise<BudgetScopePreview> => {
+  const response = await axios.post<BudgetScopePreview>('api/budgets/scope-preview', { type, categoryIds }, { signal });
   return response.data;
 };
 

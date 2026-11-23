@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import BudgetCreate from './budget-create';
-import { createBudget, previewBudgetCalendar } from './budget-api';
+import { createBudget, previewBudgetCalendar, previewBudgetScope } from './budget-api';
 import { calendarValidationError } from './budget-utils';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -18,10 +18,12 @@ jest.mock('app/entities/tag/tag-selectable.service', () => ({ getSelectableTags:
 jest.mock('./budget-api', () => ({
   createBudget: jest.fn(),
   previewBudgetCalendar: jest.fn(),
+  previewBudgetScope: jest.fn(),
 }));
 
 const mockCreateBudget = createBudget as jest.Mock;
 const mockPreviewBudgetCalendar = previewBudgetCalendar as jest.Mock;
+const mockPreviewBudgetScope = previewBudgetScope as jest.Mock;
 const mockGetAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockGetCategories = getSelectableCategories as jest.Mock;
 const mockGetTags = getSelectableTags as jest.Mock;
@@ -56,6 +58,13 @@ describe('BudgetCreate', () => {
     mockPreviewBudgetCalendar.mockResolvedValue({
       localToday: '2026-11-15',
       periods: [{ index: 0, startInclusive: '2026-11-15', endExclusive: '2026-12-15' }],
+    });
+    mockPreviewBudgetScope.mockResolvedValue({
+      unrestricted: false,
+      selectedCategories: [],
+      effectiveCategories: [],
+      missingCategoryIds: [],
+      incompatibleCategoryIds: [],
     });
   });
 
@@ -204,6 +213,37 @@ describe('BudgetCreate', () => {
       }),
     );
     expect(await screen.findByText('Created budget')).toBeTruthy();
+  });
+
+  it('renders the server-resolved unique category coverage in the creation review without treating descendants as separate selections', async () => {
+    mockGetCategories.mockResolvedValue([
+      { id: 21, name: 'Food', categoryType: 'EXPENSE', active: true },
+      { id: 22, name: 'Groceries', categoryType: 'EXPENSE', parentCategoryId: 21, parentCategoryName: 'Food', active: true },
+    ]);
+    mockPreviewBudgetScope.mockResolvedValue({
+      unrestricted: false,
+      selectedCategories: [{ id: 21, name: 'Food', color: '#123456', active: true, path: ['Food'], categoryType: 'EXPENSE' }],
+      effectiveCategories: [
+        { id: 21, name: 'Food', color: '#123456', active: true, path: ['Food'], categoryType: 'EXPENSE' },
+        { id: 22, name: 'Groceries', color: '#abcdef', active: true, path: ['Food', 'Groceries'], categoryType: 'EXPENSE' },
+        { id: 23, name: 'Cafeteria', color: null, active: false, path: ['Food', 'Cafeteria'], categoryType: 'EXPENSE' },
+      ],
+      missingCategoryIds: [],
+      incompatibleCategoryIds: [],
+    });
+    renderCreate();
+    await fillRequiredFields();
+
+    fireEvent.click(screen.getByLabelText('Selected categories and their subcategories'));
+    fireEvent.click(screen.getByLabelText('Food'));
+
+    await waitFor(() => expect(mockPreviewBudgetScope).toHaveBeenCalledWith('EXPENSE', [21], expect.anything()));
+    const review = byCy('budgetCreateFinancialScopeReview');
+    expect(review?.textContent).toContain('Food');
+    expect(review?.textContent).toContain('1 selected category · 3 included categories');
+    fireEvent.click(screen.getByText('View included categories (3)'));
+    expect(await screen.findByText(/Food › Cafeteria · inactive/)).toBeTruthy();
+    expect(review?.textContent).toContain('Included categories are determined by the current hierarchy.');
   });
 
   it('requires a concrete selection when a selected account scope is submitted', async () => {

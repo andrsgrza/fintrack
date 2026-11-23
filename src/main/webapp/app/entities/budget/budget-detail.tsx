@@ -3,10 +3,8 @@ import { Button, Input, Label } from 'reactstrap';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
-import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
 import { getSelectableTags } from 'app/entities/tag/tag-selectable.service';
 import { useAppSelector } from 'app/config/store';
-import { ICategorySelectable } from 'app/shared/model/category-selectable.model';
 import { IFinancialAccountSelectable } from 'app/shared/model/financial-account-selectable.model';
 import { ITagSelectable } from 'app/shared/model/tag-selectable.model';
 import { ProductPage, ProductPageHeader, ProductSection } from 'app/shared/ui/product-page';
@@ -28,6 +26,7 @@ import {
 } from './budget-api';
 import { BudgetLifecycleActions, BudgetLifecycleStatus } from './budget-lifecycle-actions';
 import { BudgetDetailNotificationPreferences } from './budget-detail-notification-preferences';
+import { BudgetFinancialScopeSummary } from './budget-financial-scope-summary';
 import {
   absoluteBudgetDecimal,
   boundedBudgetProgress,
@@ -44,7 +43,7 @@ import {
 
 const HISTORY_PAGE_SIZE = 10;
 
-type ScopeNames = { accounts: string[]; categories: string[]; tags: string[] };
+type ScopeReferences = { accounts: IFinancialAccountSelectable[]; tags: ITagSelectable[] };
 
 const statusLabel = (locale: string, status: BudgetOperationalStatus) =>
   copy(
@@ -84,18 +83,6 @@ const goalLabel = (locale: string, evaluation: BudgetEvaluation) => {
   return value ? copy(locale, value[0], value[1]) : null;
 };
 
-const categoryLabel = (category: ICategorySelectable) =>
-  category.parentCategoryName ? `${category.parentCategoryName} › ${category.name ?? ''}` : (category.name ?? '');
-
-const unavailableReference = (locale: string, kind: 'account' | 'category' | 'tag') => {
-  const labels = {
-    account: ['Cuenta histórica no disponible', 'Historical account unavailable'],
-    category: ['Categoría histórica no disponible', 'Historical category unavailable'],
-    tag: ['Etiqueta histórica no disponible', 'Historical tag unavailable'],
-  } as const;
-  return copy(locale, labels[kind][0], labels[kind][1]);
-};
-
 const calendarDescription = (revision: BudgetRevision, locale: string) => {
   const units: Record<BudgetRevision['intervalUnit'], [string, string]> = {
     DAY: ['día', 'day'],
@@ -129,34 +116,6 @@ const calendarDescription = (revision: BudgetRevision, locale: string) => {
     return `${base}; ${copy(locale, `termina el ${formatBudgetDate(revision.recurrenceEndDate ?? revision.anchorDate, locale)}`, `ends on ${formatBudgetDate(revision.recurrenceEndDate ?? revision.anchorDate, locale)}`)}; ${alignment}.`;
   }
   return `${base}; ${copy(locale, 'recurrente', 'recurring')}; ${alignment}.`;
-};
-
-const ScopeSummary = ({ locale, revision, names }: { locale: string; revision: BudgetRevision; names: ScopeNames | null }) => {
-  const selected = (value: string[], empty: string) => (value.length ? value.join(', ') : empty);
-  const allAccounts = copy(locale, 'Todas las cuentas de esta moneda', 'All accounts in this currency');
-  const allCategories = copy(locale, 'Todas las categorías compatibles', 'All compatible categories');
-  const noTags = copy(locale, 'Sin filtro de etiquetas', 'No tag filter');
-  const categoryValue =
-    revision.categoryScopeMode === 'ALL'
-      ? allCategories
-      : `${selected(names?.categories ?? [], unavailableReference(locale, 'category'))} · ${copy(locale, 'incluye subcategorías', 'includes subcategories')}`;
-  const tagValue =
-    revision.tagScopeMode === 'NONE'
-      ? noTags
-      : `${copy(locale, revision.tagMatchMode === 'ALL' ? 'Todas: ' : 'Cualquiera: ', revision.tagMatchMode === 'ALL' ? 'All: ' : 'Any: ')}${selected(names?.tags ?? [], unavailableReference(locale, 'tag'))}`;
-
-  return (
-    <dl className="row mb-0 small" data-cy="budgetScopeSummary">
-      <dt className="col-sm-4 text-muted">{copy(locale, 'Cuentas', 'Accounts')}</dt>
-      <dd className="col-sm-8">
-        {revision.accountScopeMode === 'ALL' ? allAccounts : selected(names?.accounts ?? [], unavailableReference(locale, 'account'))}
-      </dd>
-      <dt className="col-sm-4 text-muted">{copy(locale, 'Categorías', 'Categories')}</dt>
-      <dd className="col-sm-8">{categoryValue}</dd>
-      <dt className="col-sm-4 text-muted">{copy(locale, 'Etiquetas', 'Tags')}</dt>
-      <dd className="col-sm-8 mb-0">{tagValue}</dd>
-    </dl>
-  );
 };
 
 const EvaluationSummary = ({ locale, item, evaluation }: { locale: string; item: BudgetOverviewItem; evaluation: BudgetEvaluation }) => {
@@ -367,7 +326,7 @@ const BudgetDetail = () => {
   const [previousEvaluation, setPreviousEvaluation] = useState<BudgetEvaluation | null>(null);
   const [nextEvaluation, setNextEvaluation] = useState<BudgetEvaluation | null>(null);
   const [revision, setRevision] = useState<BudgetRevision | null>(null);
-  const [scopeNames, setScopeNames] = useState<ScopeNames | null>(null);
+  const [scopeReferences, setScopeReferences] = useState<ScopeReferences | null>(null);
   const [history, setHistory] = useState<BudgetEvaluationHistory | null>(null);
   const [historyFirst, setHistoryFirst] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -436,7 +395,7 @@ const BudgetDetail = () => {
         setPreviousEvaluation(null);
         setNextEvaluation(null);
         setRevision(null);
-        setScopeNames(null);
+        setScopeReferences(null);
         setHistoryFirst(
           next?.evaluation ? Math.max(0, Math.floor(next.evaluation.periodIndex / HISTORY_PAGE_SIZE) * HISTORY_PAGE_SIZE) : 0,
         );
@@ -506,7 +465,6 @@ const BudgetDetail = () => {
     if (!revision) return;
     let active = true;
     const requestedAccountIds = revision.accountScopeMode === 'SELECTED' ? revision.accountIds : [];
-    const requestedCategoryIds = revision.categoryScopeMode === 'SELECTED' ? revision.categoryIds : [];
     const requestedTagIds = revision.tagScopeMode === 'SELECTED' ? revision.tagIds : [];
     void Promise.all([
       Promise.all(
@@ -514,31 +472,17 @@ const BudgetDetail = () => {
           getSelectableFinancialAccounts(id).then(accounts => accounts.find(account => account.id === id) ?? null),
         ),
       ),
-      requestedCategoryIds.length ? getSelectableCategories(requestedCategoryIds) : Promise.resolve([] as ICategorySelectable[]),
       requestedTagIds.length ? getSelectableTags(requestedTagIds) : Promise.resolve([] as ITagSelectable[]),
     ])
-      .then(([accounts, categories, tags]) => {
+      .then(([accounts, tags]) => {
         if (!active) return;
-        const accountName = (account: IFinancialAccountSelectable | null) => account?.name ?? unavailableReference(locale, 'account');
-        const categoryName = (id: number) => {
-          const category = categories.find(candidate => candidate.id === id);
-          return category ? categoryLabel(category) : unavailableReference(locale, 'category');
-        };
-        const tagName = (id: number) => tags.find(candidate => candidate.id === id)?.name ?? unavailableReference(locale, 'tag');
-        setScopeNames({
-          accounts: accounts.map(accountName),
-          categories: requestedCategoryIds.map(categoryName),
-          tags: requestedTagIds.map(tagName),
+        setScopeReferences({
+          accounts: accounts.filter((account): account is IFinancialAccountSelectable => account !== null),
+          tags,
         });
       })
       .catch(() => {
-        if (active) {
-          setScopeNames({
-            accounts: requestedAccountIds.map(() => unavailableReference(locale, 'account')),
-            categories: requestedCategoryIds.map(() => unavailableReference(locale, 'category')),
-            tags: requestedTagIds.map(() => unavailableReference(locale, 'tag')),
-          });
-        }
+        if (active) setScopeReferences({ accounts: [], tags: [] });
       });
     return () => {
       active = false;
@@ -748,7 +692,15 @@ const BudgetDetail = () => {
                     </div>
                     <div className="col-12 col-lg-7">
                       <div className="small text-muted text-uppercase fw-semibold mb-1">{copy(locale, 'Alcance', 'Scope')}</div>
-                      <ScopeSummary locale={locale} revision={revision} names={scopeNames} />
+                      <BudgetFinancialScopeSummary
+                        locale={locale}
+                        type={item.type}
+                        scope={revision}
+                        accounts={scopeReferences?.accounts ?? []}
+                        tags={scopeReferences?.tags ?? []}
+                        heading={false}
+                        dataCy="budgetScopeSummary"
+                      />
                     </div>
                   </div>
                 ) : (

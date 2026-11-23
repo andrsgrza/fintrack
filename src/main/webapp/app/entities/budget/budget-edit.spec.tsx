@@ -16,6 +16,7 @@ import {
   scheduleBudgetRevision,
   updateBudgetNotificationPreferences,
   updateBudgetMetadata,
+  previewBudgetScope,
 } from './budget-api';
 import { getSelectableFinancialAccounts } from 'app/entities/financial-account/financial-account-selectable.service';
 import { getSelectableCategories } from 'app/entities/category/category-selectable.service';
@@ -35,6 +36,7 @@ jest.mock('./budget-api', () => ({
   scheduleBudgetRevision: jest.fn(),
   replaceBudgetRevision: jest.fn(),
   cancelBudgetRevision: jest.fn(),
+  previewBudgetScope: jest.fn(),
 }));
 jest.mock('app/entities/financial-account/financial-account-selectable.service', () => ({
   getSelectableFinancialAccounts: jest.fn(),
@@ -54,6 +56,7 @@ const mockUpdateNotificationPreferences = updateBudgetNotificationPreferences as
 const mockSchedule = scheduleBudgetRevision as jest.Mock;
 const mockReplace = replaceBudgetRevision as jest.Mock;
 const mockCancel = cancelBudgetRevision as jest.Mock;
+const mockPreviewBudgetScope = previewBudgetScope as jest.Mock;
 const mockAccounts = getSelectableFinancialAccounts as jest.Mock;
 const mockCategories = getSelectableCategories as jest.Mock;
 const mockTags = getSelectableTags as jest.Mock;
@@ -173,6 +176,13 @@ describe('BudgetEdit', () => {
     mockAccounts.mockResolvedValue([{ id: 41, name: 'Cash card', currency: 'MXN', accountType: 'DEBIT', active: true }]);
     mockCategories.mockResolvedValue([{ id: 51, name: 'Food', categoryType: 'EXPENSE', active: true }]);
     mockTags.mockResolvedValue([{ id: 61, name: 'Essential', active: true }]);
+    mockPreviewBudgetScope.mockResolvedValue({
+      unrestricted: false,
+      selectedCategories: [{ id: 51, name: 'Food', color: null, active: true, path: ['Food'], categoryType: 'EXPENSE' }],
+      effectiveCategories: [{ id: 51, name: 'Food', color: null, active: true, path: ['Food'], categoryType: 'EXPENSE' }],
+      missingCategoryIds: [],
+      incompatibleCategoryIds: [],
+    });
     mockNotificationPreferences.mockResolvedValue({
       budgetId: 10,
       configured: true,
@@ -359,6 +369,7 @@ describe('BudgetEdit', () => {
     fireEvent.click(byCy('reviewBudgetRevision'));
 
     await waitFor(() => expect(byCy('budgetRevisionReview')).toBeTruthy());
+    await waitFor(() => expect(byCy('confirmBudgetRevision')?.hasAttribute('disabled')).toBe(false));
     fireEvent.click(byCy('confirmBudgetRevision'));
 
     await waitFor(() =>
@@ -425,6 +436,7 @@ describe('BudgetEdit', () => {
     await waitFor(() => expect(byCy('budgetEditFuturePeriod')).toBeTruthy());
     fireEvent.click(byCy('reviewBudgetRevision'));
     await waitFor(() => expect(byCy('confirmBudgetRevision')).toBeTruthy());
+    await waitFor(() => expect(byCy('confirmBudgetRevision')?.hasAttribute('disabled')).toBe(false));
     fireEvent.click(byCy('confirmBudgetRevision'));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(10, 71, expect.objectContaining({ effectivePeriodStart: '2026-07-01' })));
   });
@@ -437,6 +449,7 @@ describe('BudgetEdit', () => {
     fireEvent.click(screen.getByLabelText('Current period'));
     fireEvent.click(byCy('reviewBudgetRevision'));
     await waitFor(() => expect(byCy('confirmBudgetRevision')).toBeTruthy());
+    await waitFor(() => expect(byCy('confirmBudgetRevision')?.hasAttribute('disabled')).toBe(false));
     fireEvent.click(byCy('confirmBudgetRevision'));
 
     expect(await screen.findByText('This budget changed elsewhere. Reload and review before confirming.')).toBeTruthy();

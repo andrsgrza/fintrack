@@ -243,15 +243,38 @@ class SemanticAnalyticsValidatorTest {
     void rejects_broken_or_cyclic_owner_scoped_category_hierarchies_before_execution() {
         assertThatThrownBy(() ->
             new SemanticAnalyticsReferenceCatalog(
-                List.of(new SemanticAnalyticsReferenceCatalog.CategoryReference(1L, "Orphan", "#123456", true, 2L)),
+                List.of(
+                    new SemanticAnalyticsReferenceCatalog.CategoryReference(
+                        1L,
+                        "Orphan",
+                        "#123456",
+                        true,
+                        2L,
+                        com.fintrack.app.domain.enumeration.CategoryType.EXPENSE
+                    )
+                ),
                 List.of()
             )
         ).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() ->
             new SemanticAnalyticsReferenceCatalog(
                 List.of(
-                    new SemanticAnalyticsReferenceCatalog.CategoryReference(1L, "One", "#123456", true, 2L),
-                    new SemanticAnalyticsReferenceCatalog.CategoryReference(2L, "Two", "#123456", true, 1L)
+                    new SemanticAnalyticsReferenceCatalog.CategoryReference(
+                        1L,
+                        "One",
+                        "#123456",
+                        true,
+                        2L,
+                        com.fintrack.app.domain.enumeration.CategoryType.EXPENSE
+                    ),
+                    new SemanticAnalyticsReferenceCatalog.CategoryReference(
+                        2L,
+                        "Two",
+                        "#123456",
+                        true,
+                        1L,
+                        com.fintrack.app.domain.enumeration.CategoryType.EXPENSE
+                    )
                 ),
                 List.of()
             )

@@ -91,6 +91,82 @@ class BudgetResourceIT {
 
     @Test
     @Transactional
+    void previewsTheOwnerScopedUniqueCategoryCoverageUsingTheSemanticHierarchy() throws Exception {
+        User owner = currentUser();
+        Category root = CategoryResourceIT.createEntity(entityManager);
+        root.setUser(owner);
+        root.setName("Scope root");
+        root.setCategoryType(com.fintrack.app.domain.enumeration.CategoryType.EXPENSE);
+        root.setActive(true);
+        entityManager.persist(root);
+        entityManager.flush();
+
+        Category child = CategoryResourceIT.createEntity(entityManager);
+        child.setUser(owner);
+        child.setName("Scope child");
+        child.setCategoryType(com.fintrack.app.domain.enumeration.CategoryType.EXPENSE);
+        child.setParentCategory(root);
+        child.setActive(true);
+        entityManager.persist(child);
+
+        Category grandchild = CategoryResourceIT.createEntity(entityManager);
+        grandchild.setUser(owner);
+        grandchild.setName("Scope inactive grandchild");
+        grandchild.setCategoryType(com.fintrack.app.domain.enumeration.CategoryType.EXPENSE);
+        grandchild.setParentCategory(child);
+        grandchild.setActive(false);
+        entityManager.persist(grandchild);
+
+        User other = otherUser();
+        Category foreign = CategoryResourceIT.createEntity(entityManager);
+        foreign.setUser(other);
+        foreign.setName("Other owner category");
+        foreign.setCategoryType(com.fintrack.app.domain.enumeration.CategoryType.EXPENSE);
+        foreign.setActive(true);
+        entityManager.persist(foreign);
+        entityManager.flush();
+
+        ObjectNode command = objectMapper.createObjectNode();
+        command.put("type", "EXPENSE");
+        command.putArray("categoryIds").add(root.getId()).add(child.getId()).add(foreign.getId());
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/scope-preview").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsBytes(command))
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.unrestricted").value(false))
+            .andExpect(jsonPath("$.selectedCategories.length()").value(2))
+            .andExpect(jsonPath("$.selectedCategories[0].name").value("Scope root"))
+            .andExpect(jsonPath("$.selectedCategories[1].name").value("Scope child"))
+            .andExpect(jsonPath("$.effectiveCategories.length()").value(3))
+            .andExpect(jsonPath("$.effectiveCategories[0].path[0]").value("Scope root"))
+            .andExpect(jsonPath("$.effectiveCategories[2].name").value("Scope inactive grandchild"))
+            .andExpect(jsonPath("$.effectiveCategories[2].active").value(false))
+            .andExpect(jsonPath("$.missingCategoryIds[0]").value(foreign.getId()));
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/scope-preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"type\":\"EXPENSE\",\"categoryIds\":[]}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.unrestricted").value(true))
+            .andExpect(jsonPath("$.effectiveCategories").isEmpty());
+
+        restBudgetMockMvc
+            .perform(
+                post("/api/budgets/scope-preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"type\":\"INCOME\",\"categoryIds\":[" + root.getId() + "]}")
+            )
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.incompatibleCategoryIds[0]").value(root.getId()));
+    }
+
+    @Test
+    @Transactional
     void createsAnAtomicFirstRevisionAndReplaysAnIdenticalRequest() throws Exception {
         User owner = currentUser();
         FinancialAccount account = FinancialAccountResourceIT.createEntity(entityManager);

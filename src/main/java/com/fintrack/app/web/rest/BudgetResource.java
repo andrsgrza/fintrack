@@ -24,6 +24,9 @@ import com.fintrack.app.service.budget.BudgetOperationalPeriodView;
 import com.fintrack.app.service.budget.BudgetOverview;
 import com.fintrack.app.service.budget.BudgetOverviewService;
 import com.fintrack.app.service.budget.BudgetRevisionScheduleCommand;
+import com.fintrack.app.service.budget.BudgetScopePreview;
+import com.fintrack.app.service.budget.BudgetScopePreviewCommand;
+import com.fintrack.app.service.budget.BudgetScopePreviewService;
 import com.fintrack.app.service.budget.BudgetVersionedCommand;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -53,6 +56,7 @@ public class BudgetResource {
     private final BudgetCalendarPreviewService calendarPreviewService;
     private final BudgetOverviewService overviewService;
     private final BudgetNotificationPreferenceService notificationPreferenceService;
+    private final BudgetScopePreviewService scopePreviewService;
 
     public BudgetResource(
         BudgetCreationService creationService,
@@ -60,7 +64,8 @@ public class BudgetResource {
         BudgetEvaluationService evaluationService,
         BudgetCalendarPreviewService calendarPreviewService,
         BudgetOverviewService overviewService,
-        BudgetNotificationPreferenceService notificationPreferenceService
+        BudgetNotificationPreferenceService notificationPreferenceService,
+        BudgetScopePreviewService scopePreviewService
     ) {
         this.creationService = creationService;
         this.commandService = commandService;
@@ -68,6 +73,7 @@ public class BudgetResource {
         this.calendarPreviewService = calendarPreviewService;
         this.overviewService = overviewService;
         this.notificationPreferenceService = notificationPreferenceService;
+        this.scopePreviewService = scopePreviewService;
     }
 
     @PostMapping
@@ -89,6 +95,12 @@ public class BudgetResource {
     @PostMapping("/calendar-preview")
     public ResponseEntity<BudgetCalendarPreview> calendarPreview(@Valid @RequestBody BudgetCalendarPreviewCommand command) {
         return ResponseEntity.ok(calendarPreviewService.preview(command));
+    }
+
+    /** Current, owner-scoped hierarchy expansion for a proposed Budget category selection; never persists a draft. */
+    @PostMapping("/scope-preview")
+    public ResponseEntity<BudgetScopePreview> scopePreview(@Valid @RequestBody BudgetScopePreviewCommand command) {
+        return ResponseEntity.ok(scopePreviewService.preview(command));
     }
 
     @PutMapping("/{budgetId}/metadata")

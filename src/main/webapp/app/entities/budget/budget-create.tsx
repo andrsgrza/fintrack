@@ -19,6 +19,7 @@ import {
   emptyNotificationPreferences,
   validateNotificationPreferences,
 } from './budget-notification-preferences';
+import { BudgetCategoryCoverageState, BudgetFinancialScopeSummary } from './budget-financial-scope-summary';
 import {
   browserTimeZone,
   budgetTargetValidationError,
@@ -366,6 +367,7 @@ const BudgetCreate = () => {
   } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [categoryCoverageState, setCategoryCoverageState] = useState<BudgetCategoryCoverageState>('NOT_REQUIRED');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -547,6 +549,12 @@ const BudgetCreate = () => {
       return copy(locale, 'Selecciona al menos una cuenta.', 'Select at least one account.');
     if (categoryScope === 'SELECTED' && !categoryIds.length)
       return copy(locale, 'Selecciona al menos una categoría.', 'Select at least one category.');
+    if (categoryScope === 'SELECTED' && categoryCoverageState !== 'READY')
+      return copy(
+        locale,
+        'Espera a que se compruebe la cobertura actual de categorías antes de crear el presupuesto.',
+        'Wait for the current category coverage to be checked before creating the budget.',
+      );
     if (tagScope === 'SELECTED' && !tagIds.length) return copy(locale, 'Selecciona al menos una etiqueta.', 'Select at least one tag.');
     return validateNotificationPreferences(notificationPreferences, locale);
   };
@@ -633,6 +641,15 @@ const BudgetCreate = () => {
     return copy(locale, `Termina en el límite completo ${terminationDate}.`, `Ends at the complete boundary ${terminationDate}.`);
   };
 
+  const calendarModeLabel = () =>
+    copy(
+      locale,
+      ({ ANCHORED: 'Desde la fecha elegida', NATURAL: 'Calendario natural', CUSTOM: 'Regla personalizada' } as Record<Alignment, string>)[
+        alignment
+      ],
+      ({ ANCHORED: 'From the selected date', NATURAL: 'Natural calendar', CUSTOM: 'Custom rule' } as Record<Alignment, string>)[alignment],
+    );
+
   return (
     <ProductPage wide className="budget-create">
       <ProductPageHeader
@@ -647,6 +664,7 @@ const BudgetCreate = () => {
             {copy(locale, 'Volver a presupuestos', 'Back to budgets')}
           </Button>
         }
+        headingId="budgetCreateHeading"
         dataCy="budgetCreateHeading"
       />
 
@@ -1112,10 +1130,16 @@ const BudgetCreate = () => {
             accountIds={accountIds}
             setAccountIds={setAccountIds}
             categoryScope={categoryScope}
-            setCategoryScope={setCategoryScope}
+            setCategoryScope={value => {
+              setCategoryScope(value);
+              setCategoryCoverageState(value === 'SELECTED' ? 'INVALID' : 'NOT_REQUIRED');
+            }}
             compatibleCategories={compatibleCategories}
             categoryIds={categoryIds}
-            setCategoryIds={setCategoryIds}
+            setCategoryIds={next => {
+              setCategoryCoverageState('LOADING');
+              setCategoryIds(next);
+            }}
             tagScope={tagScope}
             setTagScope={setTagScope}
             tagMatchMode={tagMatchMode}
@@ -1137,42 +1161,114 @@ const BudgetCreate = () => {
             />
           </ProductSection>
 
-          <ProductSection title={copy(locale, '5. Revisar y crear', '5. Review and create')}>
-            <div className="row g-3 mb-3">
-              <div className="col-12 col-md-6">
-                <strong>{copy(locale, 'Objetivo', 'Objective')}:</strong>{' '}
-                {type === 'EXPENSE'
-                  ? copy(locale, 'Límite de gastos económicos', 'Economic expense limit')
-                  : copy(locale, 'Meta de ingresos económicos', 'Economic income goal')}
-              </div>
-              <div className="col-12 col-md-6">
-                <strong>{copy(locale, 'Importe', 'Amount')}:</strong>{' '}
-                {amount && currency ? formatBudgetAmount(amount, currency, locale) : '—'}
-              </div>
-              <div className="col-12 col-md-6">
-                <strong>{copy(locale, 'Primer período', 'First period')}:</strong>{' '}
-                {preview?.periods[0] ? dateRange(preview.periods[0].startInclusive, preview.periods[0].endExclusive, locale) : '—'}
-              </div>
-              <div className="col-12 col-md-6">
-                <strong>{copy(locale, 'Alcance', 'Scope')}:</strong>{' '}
-                {copy(
-                  locale,
-                  `Cuentas: ${accountScope === 'ALL' ? 'todas' : accountIds.length}; categorías: ${categoryScope === 'ALL' ? 'todas' : categoryIds.length}; etiquetas: ${tagScope === 'NONE' ? 'ninguna' : tagIds.length}.`,
-                  `Accounts: ${accountScope === 'ALL' ? 'all' : accountIds.length}; categories: ${categoryScope === 'ALL' ? 'all' : categoryIds.length}; tags: ${tagScope === 'NONE' ? 'none' : tagIds.length}.`,
-                )}
-              </div>
-              <div className="col-12 col-md-6" data-cy="budgetNotificationReview">
-                <strong>{copy(locale, 'Notificaciones', 'Notifications')}:</strong>{' '}
-                {copy(
-                  locale,
-                  `${notificationPreferences.percentageAlertsEnabled ? `Alertas de ${type === 'EXPENSE' ? 'gasto' : 'ingresos'}: ${notificationPreferences.thresholdPercentages.map(value => formatBudgetThresholdPercentage(value, locale)).join(', ') || 'sin porcentajes'}` : 'Alertas de porcentaje desactivadas'}; resumen al cerrar: ${notificationPreferences.periodCloseEnabled ? 'activado' : 'desactivado'}.`,
-                  `${notificationPreferences.percentageAlertsEnabled ? `${type === 'EXPENSE' ? 'Spending' : 'Income'} alerts: ${notificationPreferences.thresholdPercentages.map(value => formatBudgetThresholdPercentage(value, locale)).join(', ') || 'no percentages'}` : 'Percentage alerts disabled'}; period-close summary: ${notificationPreferences.periodCloseEnabled ? 'enabled' : 'disabled'}.`,
-                )}
+          <ProductSection title={copy(locale, '5. Revisar y crear', '5. Review and create')} dataCy="budgetCreateReview">
+            <div className="d-flex flex-column gap-4">
+              <section>
+                <h4 className="h6 mb-2">{copy(locale, 'Objetivo', 'Objective')}</h4>
+                <div className="d-flex flex-column flex-md-row align-items-md-end justify-content-between gap-2 border rounded-2 p-3 bg-light">
+                  <div>
+                    <div className="small text-muted text-uppercase fw-semibold">
+                      {type === 'EXPENSE'
+                        ? copy(locale, 'Límite de gasto', 'Expense limit')
+                        : copy(locale, 'Meta de ingreso', 'Income goal')}
+                    </div>
+                    <div className="fs-4 fw-semibold" data-cy="budgetReviewAmount">
+                      {amount && currency ? formatBudgetAmount(amount, currency, locale) : '—'}
+                    </div>
+                  </div>
+                  <div className="text-md-end">
+                    <strong>{name.trim() || '—'}</strong>
+                    {description.trim() ? <p className="small text-muted mb-0 mt-1">{description.trim()}</p> : null}
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="h6 mb-2">{copy(locale, 'Calendario', 'Calendar')}</h4>
+                <dl className="row g-2 mb-0 small">
+                  <dt className="col-5 col-md-3 text-muted">{copy(locale, 'Frecuencia', 'Frequency')}</dt>
+                  <dd className="col-7 col-md-9">{recurrenceSummary()}</dd>
+                  <dt className="col-5 col-md-3 text-muted">{copy(locale, 'Modo de calendario', 'Calendar mode')}</dt>
+                  <dd className="col-7 col-md-9">{calendarModeLabel()}</dd>
+                  <dt className="col-5 col-md-3 text-muted">{copy(locale, 'Primer período', 'First period')}</dt>
+                  <dd className="col-7 col-md-9">
+                    {preview?.periods[0] ? dateRange(preview.periods[0].startInclusive, preview.periods[0].endExclusive, locale) : '—'}
+                  </dd>
+                  <dt className="col-5 col-md-3 text-muted">{copy(locale, 'Recurrencia', 'Recurrence')}</dt>
+                  <dd className="col-7 col-md-9 mb-0">
+                    {recurrenceMode === 'ONCE'
+                      ? copy(locale, 'Una sola vez.', 'One time.')
+                      : effectiveTermination === 'NONE'
+                        ? copy(locale, 'Recurrente, sin fecha final.', 'Recurring, with no end date.')
+                        : effectiveTermination === 'AFTER_N_PERIODS'
+                          ? copy(
+                              locale,
+                              `Termina después de ${terminationCount} períodos completos.`,
+                              `Ends after ${terminationCount} complete periods.`,
+                            )
+                          : copy(locale, `Termina en el límite ${terminationDate}.`, `Ends at the ${terminationDate} boundary.`)}
+                  </dd>
+                </dl>
+              </section>
+
+              <BudgetFinancialScopeSummary
+                locale={locale}
+                type={type}
+                scope={{
+                  accountScopeMode: accountScope,
+                  accountIds,
+                  categoryScopeMode: categoryScope,
+                  categoryIds,
+                  tagScopeMode: tagScope,
+                  tagIds,
+                  tagMatchMode,
+                }}
+                accounts={accounts}
+                tags={tags}
+                dataCy="budgetCreateFinancialScopeReview"
+                onCategoryCoverageStateChange={setCategoryCoverageState}
+              />
+
+              <section data-cy="budgetNotificationReview">
+                <h4 className="h6 mb-2">{copy(locale, 'Notificaciones', 'Notifications')}</h4>
+                <p className="small mb-1">
+                  {notificationPreferences.percentageAlertsEnabled
+                    ? copy(
+                        locale,
+                        `Alertas de ${type === 'EXPENSE' ? 'gasto' : 'ingresos'} activadas: ${notificationPreferences.thresholdPercentages.map(value => formatBudgetThresholdPercentage(value, locale)).join(', ') || 'sin porcentajes configurados'}.`,
+                        `${type === 'EXPENSE' ? 'Spending' : 'Income'} alerts enabled: ${notificationPreferences.thresholdPercentages.map(value => formatBudgetThresholdPercentage(value, locale)).join(', ') || 'no configured percentages'}.`,
+                      )
+                    : copy(locale, 'Alertas de porcentaje desactivadas.', 'Percentage alerts disabled.')}
+                </p>
+                <p className="small mb-0">
+                  {notificationPreferences.periodCloseEnabled
+                    ? copy(locale, 'Resumen al cierre del período activado.', 'Period-close summary enabled.')
+                    : copy(locale, 'Resumen al cierre del período desactivado.', 'Period-close summary disabled.')}
+                </p>
+              </section>
+
+              <div className="d-flex flex-wrap align-items-center gap-2 pt-2 border-top">
+                <Button
+                  color="secondary"
+                  outline
+                  type="button"
+                  onClick={() => document.getElementById('budgetCreateHeading')?.scrollIntoView({ behavior: 'smooth' })}
+                  disabled={submitting}
+                >
+                  {copy(locale, 'Modificar información', 'Edit information')}
+                </Button>
+                <Button
+                  color="primary"
+                  type="submit"
+                  disabled={submitting || referencesLoading || (categoryScope === 'SELECTED' && categoryCoverageState !== 'READY')}
+                  data-cy="submitBudget"
+                >
+                  {submitting
+                    ? copy(locale, 'Creando presupuesto…', 'Creating budget…')
+                    : copy(locale, 'Crear presupuesto', 'Create budget')}
+                </Button>
               </div>
             </div>
-            <Button color="primary" type="submit" disabled={submitting || referencesLoading} data-cy="submitBudget">
-              {submitting ? copy(locale, 'Creando presupuesto…', 'Creating budget…') : copy(locale, 'Crear presupuesto', 'Create budget')}
-            </Button>
           </ProductSection>
         </div>
       </form>

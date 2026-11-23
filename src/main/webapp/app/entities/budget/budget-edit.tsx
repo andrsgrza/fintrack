@@ -32,6 +32,7 @@ import {
 } from './budget-api';
 import { BudgetScopeSection, ScopeMode, TagScopeMode, categoryCompatible } from './budget-create';
 import { BudgetNotificationPreferencesSection } from './budget-detail-notification-preferences';
+import { BudgetCategoryCoverageState, BudgetFinancialScopeSummary } from './budget-financial-scope-summary';
 import {
   browserTimeZone,
   budgetTargetValidationError,
@@ -122,6 +123,7 @@ const BudgetEdit = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [notificationDirty, setNotificationDirty] = useState(false);
+  const [categoryCoverageState, setCategoryCoverageState] = useState<BudgetCategoryCoverageState>('NOT_REQUIRED');
 
   const load = useCallback(
     async (options: { resetMetadataDraft?: boolean; resetRevisionDraft?: boolean; blocking?: boolean } = {}) => {
@@ -711,9 +713,16 @@ const BudgetEdit = () => {
                   <div className="small text-muted text-uppercase">{copy(locale, 'Objetivo actual', 'Current target')}</div>
                   <strong>{formatBudgetAmount(currentRevision.targetAmount, item.currency, locale)}</strong>
                 </div>
-                <div className="col-12 col-md-4">
-                  <div className="small text-muted text-uppercase">{copy(locale, 'Alcance actual', 'Current scope')}</div>
-                  <span>{scopeDescription(currentRevision, locale)}</span>
+                <div className="col-12">
+                  <BudgetFinancialScopeSummary
+                    locale={locale}
+                    type={item.type}
+                    scope={currentRevision}
+                    accounts={accounts}
+                    tags={tags}
+                    heading={false}
+                    dataCy="budgetCurrentFinancialScope"
+                  />
                 </div>
               </div>
             </ProductSection>
@@ -843,11 +852,13 @@ const BudgetEdit = () => {
                       categoryScope={categoryScope}
                       setCategoryScope={value => {
                         setCategoryScope(value);
+                        setCategoryCoverageState(value === 'SELECTED' ? 'INVALID' : 'NOT_REQUIRED');
                         setReviewing(false);
                       }}
                       compatibleCategories={compatibleCategories}
                       categoryIds={categoryIds}
                       setCategoryIds={next => {
+                        setCategoryCoverageState('LOADING');
                         setCategoryIds(next);
                         setReviewing(false);
                       }}
@@ -887,6 +898,26 @@ const BudgetEdit = () => {
                             {dateRange(effectivePeriod.startInclusive, effectivePeriod.endExclusive, locale)}
                           </div>
                         ) : null}
+                        <div className="mt-3 border-top pt-3">
+                          <BudgetFinancialScopeSummary
+                            locale={locale}
+                            type={item.type}
+                            scope={{
+                              accountScopeMode: accountScope,
+                              accountIds,
+                              categoryScopeMode: categoryScope,
+                              categoryIds,
+                              tagScopeMode: tagScope,
+                              tagIds,
+                              tagMatchMode,
+                            }}
+                            accounts={accounts}
+                            tags={tags}
+                            heading={false}
+                            dataCy="budgetRevisionFinancialScopeReview"
+                            onCategoryCoverageStateChange={setCategoryCoverageState}
+                          />
+                        </div>
                         {selectedFutureSchedule ? (
                           <p className="mb-2 mt-2">
                             {copy(
@@ -904,7 +935,7 @@ const BudgetEdit = () => {
                             type="button"
                             color="primary"
                             onClick={() => void saveRevision()}
-                            disabled={savingRevision}
+                            disabled={savingRevision || (categoryScope === 'SELECTED' && categoryCoverageState !== 'READY')}
                             data-cy="confirmBudgetRevision"
                           >
                             {savingRevision
