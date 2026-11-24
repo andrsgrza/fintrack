@@ -313,6 +313,280 @@ const BudgetDetailHeaderActions = ({
   </div>
 );
 
+const BudgetDetailIdentity = ({
+  item,
+  lifecycle,
+  lifecycleItem,
+  locale,
+}: {
+  item: BudgetOverviewItem;
+  lifecycle: ReturnType<typeof useBudgetLifecycle>;
+  lifecycleItem: BudgetOverviewItem;
+  locale: string;
+}) => (
+  <>
+    <div className="d-flex flex-wrap align-items-center gap-2 mb-4" data-cy="budgetDetailIdentity">
+      <span className="badge text-bg-light border text-dark">{typeLabel(locale, item.type)}</span>
+      <span className="badge text-bg-light border text-dark">{item.currency}</span>
+      <span className="badge text-bg-light border text-dark">{statusLabel(locale, lifecycleItem.operationalStatus)}</span>
+    </div>
+    <BudgetLifecycleStatus
+      locale={locale}
+      history={lifecycle.history}
+      currentPeriodStart={lifecycle.currentEvaluation?.startInclusive ?? null}
+    />
+  </>
+);
+
+const BudgetPeriodSelector = ({
+  locale,
+  referenceDate,
+  historyRows,
+  selectedIndex,
+  onChooseReferenceDate,
+  onGoToPeriod,
+}: {
+  locale: string;
+  referenceDate: string | null;
+  historyRows: BudgetEvaluation[];
+  selectedIndex: number | null;
+  onChooseReferenceDate: (date: string) => void;
+  onGoToPeriod: (period: BudgetEvaluation) => void;
+}) => (
+  <ProductSection title={copy(locale, 'Período', 'Period')} className="mb-4">
+    <div className="row g-3 align-items-end">
+      <div className="col-12 col-md-5">
+        <Label for="budget-detail-reference-date">{copy(locale, 'Ir a una fecha', 'Go to a date')}</Label>
+        <Input
+          id="budget-detail-reference-date"
+          type="date"
+          value={referenceDate ?? ''}
+          onChange={event => onChooseReferenceDate(event.target.value)}
+          data-cy="budgetDetailReferenceDate"
+        />
+      </div>
+      {historyRows.length ? (
+        <div className="col-12 col-md-7">
+          <Label for="budget-period-picker">{copy(locale, 'Períodos cargados', 'Loaded periods')}</Label>
+          <Input
+            id="budget-period-picker"
+            type="select"
+            value={selectedIndex ?? ''}
+            onChange={event => {
+              const selected = historyRows.find(candidate => candidate.periodIndex === Number(event.target.value));
+              if (selected) onGoToPeriod(selected);
+            }}
+            data-cy="budgetPeriodPicker"
+          >
+            {historyRows.map(candidate => (
+              <option key={candidate.periodIndex} value={candidate.periodIndex}>
+                {dateRange(candidate.startInclusive, candidate.endExclusive, locale)}
+              </option>
+            ))}
+          </Input>
+        </div>
+      ) : null}
+    </div>
+    <p className="small text-muted mb-0 mt-3">
+      {copy(
+        locale,
+        'La zona horaria efectiva se conserva por período; cambiar la zona del navegador no reinterpreta este historial.',
+        'The effective time zone is preserved by period; changing this browser’s zone does not reinterpret this history.',
+      )}
+    </p>
+  </ProductSection>
+);
+
+const BudgetPeriodSummary = ({
+  item,
+  evaluation,
+  previousEvaluation,
+  nextEvaluation,
+  detailLoading,
+  revision,
+  scopeReferences,
+  locale,
+  onGoToPeriod,
+}: {
+  item: BudgetOverviewItem;
+  evaluation: BudgetEvaluation | null;
+  previousEvaluation: BudgetEvaluation | null;
+  nextEvaluation: BudgetEvaluation | null;
+  detailLoading: boolean;
+  revision: BudgetRevision | null;
+  scopeReferences: ScopeReferences | null;
+  locale: string;
+  onGoToPeriod: (period: BudgetEvaluation) => void;
+}) => {
+  if (!item.hasPeriodAtReferenceDate || !evaluation) {
+    return (
+      <ProductSection title={copy(locale, 'No hay período programado', 'No scheduled period')} className="mb-4">
+        <div className="small border-start border-3 border-secondary ps-2" role="status" data-cy="budgetNoScheduledPeriod">
+          {item.referenceMessage ??
+            copy(locale, 'No hay un período programado para la fecha seleccionada.', 'There is no scheduled period for the selected date.')}
+        </div>
+      </ProductSection>
+    );
+  }
+  return (
+    <>
+      <ProductSection title={copy(locale, 'Resumen del período', 'Period summary')} className="mb-4">
+        <div className="d-flex flex-wrap justify-content-between gap-2 mb-4">
+          <Button
+            color="secondary"
+            outline
+            onClick={() => previousEvaluation && onGoToPeriod(previousEvaluation)}
+            disabled={!previousEvaluation || detailLoading}
+            data-cy="budgetPreviousPeriod"
+          >
+            {copy(locale, '← Período anterior', '← Previous period')}
+          </Button>
+          <Button
+            color="secondary"
+            outline
+            onClick={() => nextEvaluation && onGoToPeriod(nextEvaluation)}
+            disabled={!nextEvaluation || detailLoading}
+            data-cy="budgetNextPeriod"
+          >
+            {copy(locale, 'Período siguiente →', 'Next period →')}
+          </Button>
+        </div>
+        <EvaluationSummary locale={locale} item={item} evaluation={evaluation} />
+      </ProductSection>
+
+      <ProductSection title={copy(locale, 'Configuración aplicable a este período', 'Configuration for this period')} className="mb-4">
+        {revision ? (
+          <div className="row g-4">
+            <div className="col-12 col-lg-5">
+              <div className="small text-muted text-uppercase fw-semibold mb-1">{copy(locale, 'Calendario', 'Calendar')}</div>
+              <p className="mb-0" data-cy="budgetCalendarDescription">
+                {calendarDescription(revision, locale)}
+              </p>
+              <div className="small text-muted mt-2">{copy(locale, `Revisión ${revision.number}`, `Revision ${revision.number}`)}</div>
+            </div>
+            <div className="col-12 col-lg-7">
+              <div className="small text-muted text-uppercase fw-semibold mb-1">{copy(locale, 'Alcance', 'Scope')}</div>
+              <BudgetFinancialScopeSummary
+                locale={locale}
+                type={item.type}
+                scope={revision}
+                accounts={scopeReferences?.accounts ?? []}
+                tags={scopeReferences?.tags ?? []}
+                heading={false}
+                dataCy="budgetScopeSummary"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="text-muted small">{copy(locale, 'Cargando configuración histórica…', 'Loading historical configuration…')}</div>
+        )}
+      </ProductSection>
+    </>
+  );
+};
+
+const BudgetPeriodHistory = ({
+  item,
+  historyRows,
+  hasNextHistoryPage,
+  historyFirst,
+  locale,
+  onGoToPeriod,
+  onPreviousPage,
+  onNextPage,
+}: {
+  item: BudgetOverviewItem;
+  historyRows: BudgetEvaluation[];
+  hasNextHistoryPage: boolean;
+  historyFirst: number;
+  locale: string;
+  onGoToPeriod: (period: BudgetEvaluation) => void;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+}) => (
+  <ProductSection title={copy(locale, 'Historial de períodos', 'Period history')}>
+    <p className="small text-muted">
+      {copy(
+        locale,
+        'Los importes históricos se vuelven a evaluar con los movimientos actuales. No se crean períodos después de que termina el calendario.',
+        'Historical amounts are evaluated again from current financial records. No periods are created after the schedule ends.',
+      )}
+    </p>
+    <div className="table-responsive">
+      <table className="table table-hover align-middle mb-3" data-cy="budgetPeriodHistory">
+        <thead>
+          <tr>
+            <th scope="col">{copy(locale, 'Período', 'Period')}</th>
+            <th scope="col">{copy(locale, 'Objetivo', 'Target')}</th>
+            <th scope="col">{copy(locale, 'Resultado', 'Result')}</th>
+            <th scope="col">{copy(locale, 'Estado', 'State')}</th>
+            <th scope="col">
+              <span className="visually-hidden">{copy(locale, 'Abrir período', 'Open period')}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {historyRows.map(candidate => (
+            <tr key={candidate.periodIndex} data-cy={`budgetHistoryPeriod-${candidate.periodIndex}`}>
+              <td>
+                <strong>{dateRange(candidate.startInclusive, candidate.endExclusive, locale)}</strong>
+              </td>
+              <td>{formatBudgetAmount(candidate.targetAmount, item.currency, locale)}</td>
+              <td>
+                {candidate.evaluationApplicable ? (
+                  <>
+                    {formatBudgetAmount(candidate.actualAmount, item.currency, locale)}
+                    {candidate.progressPercentage === null ? null : (
+                      <span className="small text-muted ms-1">({formatBudgetPercentage(candidate.progressPercentage, locale)})</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-muted">—</span>
+                )}
+              </td>
+              <td>
+                {candidate.evaluationApplicable ? (
+                  goalLabel(locale, candidate)
+                ) : (
+                  <span className="small">
+                    {evaluationLabel(locale, candidate) ?? candidate.message ?? statusLabel(locale, candidate.operationalStatus)}
+                  </span>
+                )}
+              </td>
+              <td className="text-end">
+                <Button
+                  color="secondary"
+                  outline
+                  size="sm"
+                  onClick={() => onGoToPeriod(candidate)}
+                  data-cy={`openBudgetPeriod-${candidate.periodIndex}`}
+                >
+                  {copy(locale, 'Ver', 'View')}
+                </Button>
+              </td>
+            </tr>
+          ))}
+          {!historyRows.length ? (
+            <tr>
+              <td colSpan={5} className="text-muted">
+                {copy(locale, 'No hay más períodos programados.', 'There are no more scheduled periods.')}
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
+    <div className="d-flex flex-wrap justify-content-between gap-2">
+      <Button color="secondary" outline size="sm" onClick={onPreviousPage} disabled={historyFirst === 0} data-cy="budgetHistoryPrevious">
+        {copy(locale, '← Anteriores', '← Previous')}
+      </Button>
+      <Button color="secondary" outline size="sm" onClick={onNextPage} disabled={!hasNextHistoryPage} data-cy="budgetHistoryNext">
+        {copy(locale, 'Siguientes →', 'Next →')}
+      </Button>
+    </div>
+  </ProductSection>
+);
+
 const BudgetDetail = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const { budgetId: rawBudgetId } = useParams();
@@ -516,8 +790,6 @@ const BudgetDetail = () => {
   const hasNextHistoryPage =
     (history?.evaluations ?? []).filter(candidate => candidate.operationalStatus !== 'COMPLETED').length > HISTORY_PAGE_SIZE;
   const selectedIndex = evaluation?.periodIndex ?? null;
-  const canGoPrevious = previousEvaluation !== null;
-  const canGoNext = nextEvaluation !== null;
   const goToPeriod = (period: BudgetEvaluation) => chooseReferenceDate(period.startInclusive);
   const lifecycleItem = lifecycle.currentEvaluation ? { ...item, operationalStatus: lifecycle.currentEvaluation.operationalStatus } : item;
   const refreshLifecycle = () => setRefreshKey(current => current + 1);
@@ -568,20 +840,7 @@ const BudgetDetail = () => {
         </div>
       ) : null}
       {loading ? <div className="text-center py-5 text-muted">{copy(locale, 'Cargando presupuesto…', 'Loading budget…')}</div> : null}
-      {!loading && item ? (
-        <>
-          <div className="d-flex flex-wrap align-items-center gap-2 mb-4" data-cy="budgetDetailIdentity">
-            <span className="badge text-bg-light border text-dark">{typeLabel(locale, item.type)}</span>
-            <span className="badge text-bg-light border text-dark">{item.currency}</span>
-            <span className="badge text-bg-light border text-dark">{statusLabel(locale, lifecycleItem.operationalStatus)}</span>
-          </div>
-          <BudgetLifecycleStatus
-            locale={locale}
-            history={lifecycle.history}
-            currentPeriodStart={lifecycle.currentEvaluation?.startInclusive ?? null}
-          />
-        </>
-      ) : null}
+      {!loading && item ? <BudgetDetailIdentity item={item} lifecycle={lifecycle} lifecycleItem={lifecycleItem} locale={locale} /> : null}
       {!loading && notFound ? (
         <ProductSection title={copy(locale, 'No se encontró el presupuesto', 'Budget not found')}>
           <p className="mb-0">
@@ -595,122 +854,25 @@ const BudgetDetail = () => {
       ) : null}
       {!loading && item ? (
         <>
-          <ProductSection title={copy(locale, 'Período', 'Period')} className="mb-4">
-            <div className="row g-3 align-items-end">
-              <div className="col-12 col-md-5">
-                <Label for="budget-detail-reference-date">{copy(locale, 'Ir a una fecha', 'Go to a date')}</Label>
-                <Input
-                  id="budget-detail-reference-date"
-                  type="date"
-                  value={referenceDate ?? ''}
-                  onChange={event => chooseReferenceDate(event.target.value)}
-                  data-cy="budgetDetailReferenceDate"
-                />
-              </div>
-              {historyRows.length ? (
-                <div className="col-12 col-md-7">
-                  <Label for="budget-period-picker">{copy(locale, 'Períodos cargados', 'Loaded periods')}</Label>
-                  <Input
-                    id="budget-period-picker"
-                    type="select"
-                    value={selectedIndex ?? ''}
-                    onChange={event => {
-                      const selected = historyRows.find(candidate => candidate.periodIndex === Number(event.target.value));
-                      if (selected) goToPeriod(selected);
-                    }}
-                    data-cy="budgetPeriodPicker"
-                  >
-                    {historyRows.map(candidate => (
-                      <option key={candidate.periodIndex} value={candidate.periodIndex}>
-                        {dateRange(candidate.startInclusive, candidate.endExclusive, locale)}
-                      </option>
-                    ))}
-                  </Input>
-                </div>
-              ) : null}
-            </div>
-            <p className="small text-muted mb-0 mt-3">
-              {copy(
-                locale,
-                'La zona horaria efectiva se conserva por período; cambiar la zona del navegador no reinterpreta este historial.',
-                'The effective time zone is preserved by period; changing this browser’s zone does not reinterpret this history.',
-              )}
-            </p>
-          </ProductSection>
-
-          {!item.hasPeriodAtReferenceDate || !evaluation ? (
-            <ProductSection title={copy(locale, 'No hay período programado', 'No scheduled period')} className="mb-4">
-              <div className="small border-start border-3 border-secondary ps-2" role="status" data-cy="budgetNoScheduledPeriod">
-                {item.referenceMessage ??
-                  copy(
-                    locale,
-                    'No hay un período programado para la fecha seleccionada.',
-                    'There is no scheduled period for the selected date.',
-                  )}
-              </div>
-            </ProductSection>
-          ) : (
-            <>
-              <ProductSection title={copy(locale, 'Resumen del período', 'Period summary')} className="mb-4">
-                <div className="d-flex flex-wrap justify-content-between gap-2 mb-4">
-                  <Button
-                    color="secondary"
-                    outline
-                    onClick={() => previousEvaluation && goToPeriod(previousEvaluation)}
-                    disabled={!canGoPrevious || detailLoading}
-                    data-cy="budgetPreviousPeriod"
-                  >
-                    {copy(locale, '← Período anterior', '← Previous period')}
-                  </Button>
-                  <Button
-                    color="secondary"
-                    outline
-                    onClick={() => nextEvaluation && goToPeriod(nextEvaluation)}
-                    disabled={!canGoNext || detailLoading}
-                    data-cy="budgetNextPeriod"
-                  >
-                    {copy(locale, 'Período siguiente →', 'Next period →')}
-                  </Button>
-                </div>
-                <EvaluationSummary locale={locale} item={item} evaluation={evaluation} />
-              </ProductSection>
-
-              <ProductSection
-                title={copy(locale, 'Configuración aplicable a este período', 'Configuration for this period')}
-                className="mb-4"
-              >
-                {revision ? (
-                  <div className="row g-4">
-                    <div className="col-12 col-lg-5">
-                      <div className="small text-muted text-uppercase fw-semibold mb-1">{copy(locale, 'Calendario', 'Calendar')}</div>
-                      <p className="mb-0" data-cy="budgetCalendarDescription">
-                        {calendarDescription(revision, locale)}
-                      </p>
-                      <div className="small text-muted mt-2">
-                        {copy(locale, `Revisión ${revision.number}`, `Revision ${revision.number}`)}
-                      </div>
-                    </div>
-                    <div className="col-12 col-lg-7">
-                      <div className="small text-muted text-uppercase fw-semibold mb-1">{copy(locale, 'Alcance', 'Scope')}</div>
-                      <BudgetFinancialScopeSummary
-                        locale={locale}
-                        type={item.type}
-                        scope={revision}
-                        accounts={scopeReferences?.accounts ?? []}
-                        tags={scopeReferences?.tags ?? []}
-                        heading={false}
-                        dataCy="budgetScopeSummary"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-muted small">
-                    {copy(locale, 'Cargando configuración histórica…', 'Loading historical configuration…')}
-                  </div>
-                )}
-              </ProductSection>
-            </>
-          )}
+          <BudgetPeriodSelector
+            locale={locale}
+            referenceDate={referenceDate}
+            historyRows={historyRows}
+            selectedIndex={selectedIndex}
+            onChooseReferenceDate={chooseReferenceDate}
+            onGoToPeriod={goToPeriod}
+          />
+          <BudgetPeriodSummary
+            item={item}
+            evaluation={evaluation}
+            previousEvaluation={previousEvaluation}
+            nextEvaluation={nextEvaluation}
+            detailLoading={detailLoading}
+            revision={revision}
+            scopeReferences={scopeReferences}
+            locale={locale}
+            onGoToPeriod={goToPeriod}
+          />
 
           <BudgetDetailNotificationPreferences
             budgetId={budgetId}
@@ -720,103 +882,16 @@ const BudgetDetail = () => {
             refreshKey={refreshKey}
           />
 
-          <ProductSection title={copy(locale, 'Historial de períodos', 'Period history')}>
-            <p className="small text-muted">
-              {copy(
-                locale,
-                'Los importes históricos se vuelven a evaluar con los movimientos actuales. No se crean períodos después de que termina el calendario.',
-                'Historical amounts are evaluated again from current financial records. No periods are created after the schedule ends.',
-              )}
-            </p>
-            <div className="table-responsive">
-              <table className="table table-hover align-middle mb-3" data-cy="budgetPeriodHistory">
-                <thead>
-                  <tr>
-                    <th scope="col">{copy(locale, 'Período', 'Period')}</th>
-                    <th scope="col">{copy(locale, 'Objetivo', 'Target')}</th>
-                    <th scope="col">{copy(locale, 'Resultado', 'Result')}</th>
-                    <th scope="col">{copy(locale, 'Estado', 'State')}</th>
-                    <th scope="col">
-                      <span className="visually-hidden">{copy(locale, 'Abrir período', 'Open period')}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historyRows.map(candidate => (
-                    <tr key={candidate.periodIndex} data-cy={`budgetHistoryPeriod-${candidate.periodIndex}`}>
-                      <td>
-                        <strong>{dateRange(candidate.startInclusive, candidate.endExclusive, locale)}</strong>
-                      </td>
-                      <td>{formatBudgetAmount(candidate.targetAmount, item.currency, locale)}</td>
-                      <td>
-                        {candidate.evaluationApplicable ? (
-                          <>
-                            {formatBudgetAmount(candidate.actualAmount, item.currency, locale)}
-                            {candidate.progressPercentage === null ? null : (
-                              <span className="small text-muted ms-1">
-                                ({formatBudgetPercentage(candidate.progressPercentage, locale)})
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                      <td>
-                        {candidate.evaluationApplicable ? (
-                          goalLabel(locale, candidate)
-                        ) : (
-                          <span className="small">
-                            {evaluationLabel(locale, candidate) ?? candidate.message ?? statusLabel(locale, candidate.operationalStatus)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-end">
-                        <Button
-                          color="secondary"
-                          outline
-                          size="sm"
-                          onClick={() => goToPeriod(candidate)}
-                          data-cy={`openBudgetPeriod-${candidate.periodIndex}`}
-                        >
-                          {copy(locale, 'Ver', 'View')}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {!historyRows.length ? (
-                    <tr>
-                      <td colSpan={5} className="text-muted">
-                        {copy(locale, 'No hay más períodos programados.', 'There are no more scheduled periods.')}
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-            <div className="d-flex flex-wrap justify-content-between gap-2">
-              <Button
-                color="secondary"
-                outline
-                size="sm"
-                onClick={() => setHistoryFirst(current => Math.max(0, current - HISTORY_PAGE_SIZE))}
-                disabled={historyFirst === 0}
-                data-cy="budgetHistoryPrevious"
-              >
-                {copy(locale, '← Anteriores', '← Previous')}
-              </Button>
-              <Button
-                color="secondary"
-                outline
-                size="sm"
-                onClick={() => setHistoryFirst(current => current + HISTORY_PAGE_SIZE)}
-                disabled={!hasNextHistoryPage}
-                data-cy="budgetHistoryNext"
-              >
-                {copy(locale, 'Siguientes →', 'Next →')}
-              </Button>
-            </div>
-          </ProductSection>
+          <BudgetPeriodHistory
+            item={item}
+            historyRows={historyRows}
+            hasNextHistoryPage={hasNextHistoryPage}
+            historyFirst={historyFirst}
+            locale={locale}
+            onGoToPeriod={goToPeriod}
+            onPreviousPage={() => setHistoryFirst(current => Math.max(0, current - HISTORY_PAGE_SIZE))}
+            onNextPage={() => setHistoryFirst(current => current + HISTORY_PAGE_SIZE)}
+          />
         </>
       ) : null}
     </ProductPage>

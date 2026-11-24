@@ -38,6 +38,7 @@ type IntervalUnit = '' | 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR';
 type Alignment = 'ANCHORED' | 'NATURAL' | 'CUSTOM';
 type RecurrenceMode = 'ONCE' | 'RECURRING';
 type Termination = 'NONE' | 'AFTER_N_PERIODS' | 'END_DATE';
+type CalendarPreview = { localToday: string; periods: Array<{ index: number; startInclusive: string; endExclusive: string }> };
 
 const newRequestId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return `budget-${crypto.randomUUID()}`;
@@ -105,6 +106,97 @@ const dateInMonth = (month: string, requestedDay: number) => {
 };
 
 const dateInYear = (year: string, month: number, requestedDay: number) => dateInMonth(`${year}-${pad(month)}`, requestedDay);
+
+const useBudgetCalendarState = (today: string) => {
+  const [intervalCount, setIntervalCount] = useState('');
+  const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('');
+  const [alignment, setAlignment] = useState<Alignment>('ANCHORED');
+  const [anchorDate, setAnchorDate] = useState(today);
+  const [naturalWeek, setNaturalWeek] = useState(() => isoWeekValue(today));
+  const [naturalMonth, setNaturalMonth] = useState(() => monthValue(today));
+  const [naturalQuarter, setNaturalQuarter] = useState(() => quarterValue(today));
+  const [naturalYear, setNaturalYear] = useState(() => yearValue(today));
+  const [customWeek, setCustomWeek] = useState(() => isoWeekValue(today));
+  const [customWeekday, setCustomWeekday] = useState('1');
+  const [customMonth, setCustomMonth] = useState(() => monthValue(today));
+  const [customQuarter, setCustomQuarter] = useState(() => monthValue(today));
+  const [customYear, setCustomYear] = useState(() => yearValue(today));
+  const [customYearMonth, setCustomYearMonth] = useState(() => String(Number(today.slice(5, 7))));
+  const [customDayOfMonth, setCustomDayOfMonth] = useState(() => String(Number(today.slice(8, 10))));
+  const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>('RECURRING');
+  const [termination, setTermination] = useState<Termination>('NONE');
+  const [terminationCount, setTerminationCount] = useState('');
+  const [terminationDate, setTerminationDate] = useState('');
+  return {
+    intervalCount,
+    setIntervalCount,
+    intervalUnit,
+    setIntervalUnit,
+    alignment,
+    setAlignment,
+    anchorDate,
+    setAnchorDate,
+    naturalWeek,
+    setNaturalWeek,
+    naturalMonth,
+    setNaturalMonth,
+    naturalQuarter,
+    setNaturalQuarter,
+    naturalYear,
+    setNaturalYear,
+    customWeek,
+    setCustomWeek,
+    customWeekday,
+    setCustomWeekday,
+    customMonth,
+    setCustomMonth,
+    customQuarter,
+    setCustomQuarter,
+    customYear,
+    setCustomYear,
+    customYearMonth,
+    setCustomYearMonth,
+    customDayOfMonth,
+    setCustomDayOfMonth,
+    recurrenceMode,
+    setRecurrenceMode,
+    termination,
+    setTermination,
+    terminationCount,
+    setTerminationCount,
+    terminationDate,
+    setTerminationDate,
+  };
+};
+
+type BudgetCalendarState = ReturnType<typeof useBudgetCalendarState>;
+
+const calendarIsReady = ({
+  numericInterval,
+  intervalUnit,
+  effectiveAnchorDate,
+  alignment,
+  effectiveCustomDay,
+  effectiveTermination,
+  terminationCount,
+  terminationDate,
+}: {
+  numericInterval: number;
+  intervalUnit: IntervalUnit;
+  effectiveAnchorDate: string;
+  alignment: Alignment;
+  effectiveCustomDay: number | null;
+  effectiveTermination: Termination;
+  terminationCount: string;
+  terminationDate: string;
+}) =>
+  Number.isInteger(numericInterval) &&
+  numericInterval > 0 &&
+  intervalUnit !== '' &&
+  effectiveAnchorDate !== '' &&
+  (alignment !== 'CUSTOM' || intervalUnit === 'WEEK' || effectiveCustomDay !== null) &&
+  (effectiveTermination !== 'AFTER_N_PERIODS' || (Number.isInteger(Number(terminationCount)) && Number(terminationCount) > 0)) &&
+  (effectiveTermination !== 'END_DATE' || terminationDate !== '');
 
 export const BudgetScopeSection = ({
   title,
@@ -315,6 +407,426 @@ export const BudgetScopeSection = ({
   </ProductSection>
 );
 
+const BudgetCalendarSection = ({
+  calendar,
+  locale,
+  submitting,
+  today,
+  effectiveAnchorDate,
+  numericCustomDay,
+  preview,
+  previewError,
+  previewLoading,
+  recurrenceSummary,
+}: {
+  calendar: BudgetCalendarState;
+  locale: string;
+  submitting: boolean;
+  today: string;
+  effectiveAnchorDate: string;
+  numericCustomDay: number;
+  preview: CalendarPreview | null;
+  previewError: string | null;
+  previewLoading: boolean;
+  recurrenceSummary: () => string;
+}) => {
+  const {
+    intervalCount,
+    setIntervalCount,
+    intervalUnit,
+    setIntervalUnit,
+    alignment,
+    setAlignment,
+    anchorDate,
+    setAnchorDate,
+    naturalWeek,
+    setNaturalWeek,
+    naturalMonth,
+    setNaturalMonth,
+    naturalQuarter,
+    setNaturalQuarter,
+    naturalYear,
+    setNaturalYear,
+    customWeek,
+    setCustomWeek,
+    customWeekday,
+    setCustomWeekday,
+    customMonth,
+    setCustomMonth,
+    customQuarter,
+    setCustomQuarter,
+    customYear,
+    setCustomYear,
+    customYearMonth,
+    setCustomYearMonth,
+    customDayOfMonth,
+    setCustomDayOfMonth,
+    recurrenceMode,
+    setRecurrenceMode,
+    termination,
+    setTermination,
+    terminationCount,
+    setTerminationCount,
+    terminationDate,
+    setTerminationDate,
+  } = calendar;
+  return (
+    <ProductSection title={copy(locale, '2. Calendario', '2. Calendar')}>
+      <div className="row g-3">
+        <div className="col-6 col-md-3">
+          <Label for="budget-interval-count">{copy(locale, 'Cada', 'Every')}</Label>
+          <Input
+            id="budget-interval-count"
+            type="number"
+            min="1"
+            step="1"
+            value={intervalCount}
+            onChange={event => setIntervalCount(event.target.value)}
+            disabled={submitting}
+            data-cy="budgetIntervalCount"
+          />
+        </div>
+        <div className="col-6 col-md-3">
+          <Label for="budget-interval-unit">{copy(locale, 'Unidad', 'Unit')}</Label>
+          <Input
+            id="budget-interval-unit"
+            type="select"
+            value={intervalUnit}
+            onChange={event => {
+              const next = event.target.value as IntervalUnit;
+              setIntervalUnit(next);
+              if (next === 'DAY') setAlignment('ANCHORED');
+            }}
+            disabled={submitting}
+            data-cy="budgetIntervalUnit"
+          >
+            <option value="">{copy(locale, 'Selecciona…', 'Select…')}</option>
+            <option value="DAY">{copy(locale, 'Días', 'Days')}</option>
+            <option value="WEEK">{copy(locale, 'Semanas', 'Weeks')}</option>
+            <option value="MONTH">{copy(locale, 'Meses', 'Months')}</option>
+            <option value="QUARTER">{copy(locale, 'Trimestres', 'Quarters')}</option>
+            <option value="YEAR">{copy(locale, 'Años', 'Years')}</option>
+          </Input>
+        </div>
+        {intervalUnit !== 'DAY' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-alignment">{copy(locale, 'Modo de calendario', 'Calendar mode')}</Label>
+            <Input
+              id="budget-alignment"
+              type="select"
+              value={alignment}
+              onChange={event => setAlignment(event.target.value as Alignment)}
+              disabled={submitting}
+              data-cy="budgetCalendarMode"
+            >
+              <option value="ANCHORED">{copy(locale, 'Desde una fecha específica', 'From a specific date')}</option>
+              <option value="NATURAL">{copy(locale, 'Calendario natural', 'Natural calendar')}</option>
+              <option value="CUSTOM">{copy(locale, 'Calendario personalizado', 'Custom calendar')}</option>
+            </Input>
+          </div>
+        ) : null}
+        {alignment === 'ANCHORED' || intervalUnit === 'DAY' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-anchor-date">{copy(locale, 'Fecha de inicio', 'Start date')}</Label>
+            <Input
+              id="budget-anchor-date"
+              type="date"
+              value={anchorDate}
+              onChange={event => setAnchorDate(event.target.value)}
+              disabled={submitting}
+              data-cy="budgetStartDate"
+            />
+            <div className="form-text">
+              {copy(locale, 'Puedes empezar en una fecha pasada, actual o futura.', 'You can start on a past, current, or future date.')}
+            </div>
+          </div>
+        ) : null}
+        {alignment === 'NATURAL' && intervalUnit === 'WEEK' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-natural-week">{copy(locale, 'Semana ISO', 'ISO week')}</Label>
+            <Input
+              id="budget-natural-week"
+              type="week"
+              value={naturalWeek}
+              onChange={event => setNaturalWeek(event.target.value)}
+              disabled={submitting}
+            />
+          </div>
+        ) : null}
+        {alignment === 'NATURAL' && intervalUnit === 'MONTH' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-natural-month">{copy(locale, 'Mes', 'Month')}</Label>
+            <Input
+              id="budget-natural-month"
+              type="month"
+              value={naturalMonth}
+              onChange={event => setNaturalMonth(event.target.value)}
+              disabled={submitting}
+            />
+          </div>
+        ) : null}
+        {alignment === 'NATURAL' && intervalUnit === 'QUARTER' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-natural-quarter">{copy(locale, 'Trimestre', 'Quarter')}</Label>
+            <Input
+              id="budget-natural-quarter"
+              type="select"
+              value={naturalQuarter}
+              onChange={event => setNaturalQuarter(event.target.value)}
+              disabled={submitting}
+            >
+              {[0, 1, 2, 3].map(quarter => {
+                const year = Number(naturalYear) || Number(today.slice(0, 4));
+                return <option key={quarter} value={`${year}-Q${quarter + 1}`}>{`${year} · Q${quarter + 1}`}</option>;
+              })}
+            </Input>
+          </div>
+        ) : null}
+        {alignment === 'NATURAL' && intervalUnit === 'QUARTER' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-natural-quarter-year">{copy(locale, 'Año', 'Year')}</Label>
+            <Input
+              id="budget-natural-quarter-year"
+              type="number"
+              min="1900"
+              max="9999"
+              value={naturalYear}
+              onChange={event => {
+                const next = event.target.value;
+                setNaturalYear(next);
+                const currentQuarter = naturalQuarter.slice(-2) || 'Q1';
+                setNaturalQuarter(`${next}-${currentQuarter}`);
+              }}
+              disabled={submitting}
+            />
+          </div>
+        ) : null}
+        {alignment === 'NATURAL' && intervalUnit === 'YEAR' ? (
+          <div className="col-12 col-md-3">
+            <Label for="budget-natural-year">{copy(locale, 'Año', 'Year')}</Label>
+            <Input
+              id="budget-natural-year"
+              type="number"
+              min="1900"
+              max="9999"
+              value={naturalYear}
+              onChange={event => setNaturalYear(event.target.value)}
+              disabled={submitting}
+            />
+          </div>
+        ) : null}
+        {alignment === 'CUSTOM' && intervalUnit === 'WEEK' ? (
+          <>
+            <div className="col-12 col-md-3">
+              <Label for="budget-custom-week">{copy(locale, 'Primer ciclo completo', 'First complete cycle')}</Label>
+              <Input
+                id="budget-custom-week"
+                type="week"
+                value={customWeek}
+                onChange={event => setCustomWeek(event.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            <div className="col-12 col-md-3">
+              <Label for="budget-custom-weekday">{copy(locale, 'La semana comienza', 'Week starts on')}</Label>
+              <Input
+                id="budget-custom-weekday"
+                type="select"
+                value={customWeekday}
+                onChange={event => setCustomWeekday(event.target.value)}
+                disabled={submitting}
+              >
+                {weekdays.map(([value, spanish, english]) => (
+                  <option key={value} value={value}>
+                    {copy(locale, spanish, english)}
+                  </option>
+                ))}
+              </Input>
+            </div>
+          </>
+        ) : null}
+        {alignment === 'CUSTOM' && ['MONTH', 'QUARTER'].includes(intervalUnit) ? (
+          <>
+            <div className="col-12 col-md-3">
+              <Label for="budget-custom-cycle-month">{copy(locale, 'Mes del primer ciclo', 'First cycle month')}</Label>
+              <Input
+                id="budget-custom-cycle-month"
+                type="month"
+                value={intervalUnit === 'MONTH' ? customMonth : customQuarter}
+                onChange={event => (intervalUnit === 'MONTH' ? setCustomMonth(event.target.value) : setCustomQuarter(event.target.value))}
+                disabled={submitting}
+              />
+            </div>
+            <div className="col-12 col-md-3">
+              <Label for="budget-custom-day">{copy(locale, 'Día recurrente', 'Recurring day')}</Label>
+              <Input
+                id="budget-custom-day"
+                type="select"
+                value={customDayOfMonth}
+                onChange={event => setCustomDayOfMonth(event.target.value)}
+                disabled={submitting}
+              >
+                {Array.from({ length: 31 }, (_, index) => index + 1).map(day => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </Input>
+            </div>
+          </>
+        ) : null}
+        {alignment === 'CUSTOM' && intervalUnit === 'YEAR' ? (
+          <>
+            <div className="col-12 col-md-3">
+              <Label for="budget-custom-year">{copy(locale, 'Año del primer ciclo', 'First cycle year')}</Label>
+              <Input
+                id="budget-custom-year"
+                type="number"
+                min="1900"
+                max="9999"
+                value={customYear}
+                onChange={event => setCustomYear(event.target.value)}
+                disabled={submitting}
+              />
+            </div>
+            <div className="col-6 col-md-2">
+              <Label for="budget-custom-year-month">{copy(locale, 'Mes', 'Month')}</Label>
+              <Input
+                id="budget-custom-year-month"
+                type="select"
+                value={customYearMonth}
+                onChange={event => setCustomYearMonth(event.target.value)}
+                disabled={submitting}
+              >
+                {Array.from({ length: 12 }, (_, index) => index + 1).map(month => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
+                ))}
+              </Input>
+            </div>
+            <div className="col-6 col-md-2">
+              <Label for="budget-custom-year-day">{copy(locale, 'Día recurrente', 'Recurring day')}</Label>
+              <Input
+                id="budget-custom-year-day"
+                type="select"
+                value={customDayOfMonth}
+                onChange={event => setCustomDayOfMonth(event.target.value)}
+                disabled={submitting}
+              >
+                {Array.from({ length: 31 }, (_, index) => index + 1).map(day => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </Input>
+            </div>
+          </>
+        ) : null}
+        {alignment === 'CUSTOM' && ['MONTH', 'QUARTER'].includes(intervalUnit) && numericCustomDay >= 29 ? (
+          <div className="col-12">
+            <p className="small text-muted mb-0" data-cy="budgetMonthEndHint">
+              {copy(
+                locale,
+                `En los meses que no tengan día ${numericCustomDay}, el periodo comenzará el último día disponible. Cuando vuelva a existir el día ${numericCustomDay}, se utilizará nuevamente.`,
+                `In months without day ${numericCustomDay}, the period starts on the last available day. It returns to day ${numericCustomDay} whenever available.`,
+              )}
+            </p>
+          </div>
+        ) : null}
+        {alignment === 'CUSTOM' && intervalUnit === 'YEAR' && Number(customYearMonth) === 2 && numericCustomDay === 29 ? (
+          <div className="col-12">
+            <p className="small text-muted mb-0" data-cy="budgetLeapYearHint">
+              {copy(
+                locale,
+                'En los años no bisiestos se utilizará el 28 de febrero. En los años bisiestos se recuperará el 29.',
+                'In non-leap years February 28 is used. February 29 returns in leap years.',
+              )}
+            </p>
+          </div>
+        ) : null}
+        <div className="col-12 col-md-6">
+          <Label for="budget-recurrence">{copy(locale, 'Frecuencia', 'Frequency')}</Label>
+          <Input
+            id="budget-recurrence"
+            type="select"
+            value={recurrenceMode}
+            onChange={event => setRecurrenceMode(event.target.value as RecurrenceMode)}
+            disabled={submitting}
+          >
+            <option value="RECURRING">{copy(locale, 'Recurrente', 'Recurring')}</option>
+            <option value="ONCE">{copy(locale, 'Una sola vez', 'One time')}</option>
+          </Input>
+        </div>
+        {recurrenceMode === 'RECURRING' ? (
+          <>
+            <div className="col-12 col-md-6">
+              <Label for="budget-termination">{copy(locale, 'Finalización', 'Ends')}</Label>
+              <Input
+                id="budget-termination"
+                type="select"
+                value={termination}
+                onChange={event => setTermination(event.target.value as Termination)}
+                disabled={submitting}
+              >
+                <option value="NONE">{copy(locale, 'Sin fecha final', 'No end date')}</option>
+                <option value="AFTER_N_PERIODS">{copy(locale, 'Después de períodos completos', 'After complete periods')}</option>
+                <option value="END_DATE">{copy(locale, 'En una fecha de límite completa', 'At a complete boundary date')}</option>
+              </Input>
+            </div>
+            {termination === 'AFTER_N_PERIODS' ? (
+              <div className="col-12 col-md-6">
+                <Label for="budget-termination-count">{copy(locale, 'Número de períodos', 'Number of periods')}</Label>
+                <Input
+                  id="budget-termination-count"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={terminationCount}
+                  onChange={event => setTerminationCount(event.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+            ) : null}
+            {termination === 'END_DATE' ? (
+              <div className="col-12 col-md-6">
+                <Label for="budget-termination-date">{copy(locale, 'Fecha de límite', 'Boundary date')}</Label>
+                <Input
+                  id="budget-termination-date"
+                  type="date"
+                  min={effectiveAnchorDate || today}
+                  value={terminationDate}
+                  onChange={event => setTerminationDate(event.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      <div className="mt-4 border rounded-2 p-3 bg-light" aria-live="polite" data-cy="budgetCalendarPreview">
+        <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+          <strong>{copy(locale, 'Vista previa del calendario', 'Calendar preview')}</strong>
+          {previewLoading ? <span className="small text-muted">{copy(locale, 'Actualizando…', 'Updating…')}</span> : null}
+        </div>
+        <p className="small text-muted mb-2">{recurrenceSummary()}</p>
+        {previewError ? (
+          <div className="small text-danger" role="alert">
+            {previewError}
+          </div>
+        ) : null}
+        {preview?.periods.length ? (
+          <ol className="small mb-0 ps-3">
+            {preview.periods.map(period => (
+              <li key={period.index}>{dateRange(period.startInclusive, period.endExclusive, locale)}</li>
+            ))}
+          </ol>
+        ) : null}
+      </div>
+    </ProductSection>
+  );
+};
+
 const BudgetCreate = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
   const navigate = useNavigate();
@@ -329,25 +841,47 @@ const BudgetCreate = () => {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('');
-  const [intervalCount, setIntervalCount] = useState('');
-  const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('');
-  const [alignment, setAlignment] = useState<Alignment>('ANCHORED');
-  const [anchorDate, setAnchorDate] = useState(today);
-  const [naturalWeek, setNaturalWeek] = useState(() => isoWeekValue(today));
-  const [naturalMonth, setNaturalMonth] = useState(() => monthValue(today));
-  const [naturalQuarter, setNaturalQuarter] = useState(() => quarterValue(today));
-  const [naturalYear, setNaturalYear] = useState(() => yearValue(today));
-  const [customWeek, setCustomWeek] = useState(() => isoWeekValue(today));
-  const [customWeekday, setCustomWeekday] = useState('1');
-  const [customMonth, setCustomMonth] = useState(() => monthValue(today));
-  const [customQuarter, setCustomQuarter] = useState(() => monthValue(today));
-  const [customYear, setCustomYear] = useState(() => yearValue(today));
-  const [customYearMonth, setCustomYearMonth] = useState(() => String(Number(today.slice(5, 7))));
-  const [customDayOfMonth, setCustomDayOfMonth] = useState(() => String(Number(today.slice(8, 10))));
-  const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>('RECURRING');
-  const [termination, setTermination] = useState<Termination>('NONE');
-  const [terminationCount, setTerminationCount] = useState('');
-  const [terminationDate, setTerminationDate] = useState('');
+  const calendar = useBudgetCalendarState(today);
+  const {
+    intervalCount,
+    setIntervalCount,
+    intervalUnit,
+    setIntervalUnit,
+    alignment,
+    setAlignment,
+    anchorDate,
+    setAnchorDate,
+    naturalWeek,
+    setNaturalWeek,
+    naturalMonth,
+    setNaturalMonth,
+    naturalQuarter,
+    setNaturalQuarter,
+    naturalYear,
+    setNaturalYear,
+    customWeek,
+    setCustomWeek,
+    customWeekday,
+    setCustomWeekday,
+    customMonth,
+    setCustomMonth,
+    customQuarter,
+    setCustomQuarter,
+    customYear,
+    setCustomYear,
+    customYearMonth,
+    setCustomYearMonth,
+    customDayOfMonth,
+    setCustomDayOfMonth,
+    recurrenceMode,
+    setRecurrenceMode,
+    termination,
+    setTermination,
+    terminationCount,
+    setTerminationCount,
+    terminationDate,
+    setTerminationDate,
+  } = calendar;
   const [accountScope, setAccountScope] = useState<ScopeMode>('ALL');
   const [accountIds, setAccountIds] = useState<number[]>([]);
   const [categoryScope, setCategoryScope] = useState<ScopeMode>('ALL');
@@ -361,10 +895,7 @@ const BudgetCreate = () => {
   const [tags, setTags] = useState<ITagSelectable[]>([]);
   const [referencesLoading, setReferencesLoading] = useState(true);
   const [referenceError, setReferenceError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{
-    localToday: string;
-    periods: Array<{ index: number; startInclusive: string; endExclusive: string }>;
-  } | null>(null);
+  const [preview, setPreview] = useState<CalendarPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [categoryCoverageState, setCategoryCoverageState] = useState<BudgetCategoryCoverageState>('NOT_REQUIRED');
@@ -444,14 +975,16 @@ const BudgetCreate = () => {
     alignment === 'CUSTOM' && ['MONTH', 'QUARTER', 'YEAR'].includes(intervalUnit) && numericCustomDay >= 1 && numericCustomDay <= 31
       ? numericCustomDay
       : null;
-  const calendarReady =
-    Number.isInteger(numericInterval) &&
-    numericInterval > 0 &&
-    intervalUnit !== '' &&
-    effectiveAnchorDate !== '' &&
-    (alignment !== 'CUSTOM' || intervalUnit === 'WEEK' || effectiveCustomDay !== null) &&
-    (effectiveTermination !== 'AFTER_N_PERIODS' || (Number.isInteger(Number(terminationCount)) && Number(terminationCount) > 0)) &&
-    (effectiveTermination !== 'END_DATE' || terminationDate !== '');
+  const calendarReady = calendarIsReady({
+    numericInterval,
+    intervalUnit,
+    effectiveAnchorDate,
+    alignment,
+    effectiveCustomDay,
+    effectiveTermination,
+    terminationCount,
+    terminationDate,
+  });
 
   useEffect(() => {
     previewRequest.current?.abort();
@@ -759,366 +1292,18 @@ const BudgetCreate = () => {
             </div>
           </ProductSection>
 
-          <ProductSection title={copy(locale, '2. Calendario', '2. Calendar')}>
-            <div className="row g-3">
-              <div className="col-6 col-md-3">
-                <Label for="budget-interval-count">{copy(locale, 'Cada', 'Every')}</Label>
-                <Input
-                  id="budget-interval-count"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={intervalCount}
-                  onChange={event => setIntervalCount(event.target.value)}
-                  disabled={submitting}
-                  data-cy="budgetIntervalCount"
-                />
-              </div>
-              <div className="col-6 col-md-3">
-                <Label for="budget-interval-unit">{copy(locale, 'Unidad', 'Unit')}</Label>
-                <Input
-                  id="budget-interval-unit"
-                  type="select"
-                  value={intervalUnit}
-                  onChange={event => {
-                    const next = event.target.value as IntervalUnit;
-                    setIntervalUnit(next);
-                    if (next === 'DAY') setAlignment('ANCHORED');
-                  }}
-                  disabled={submitting}
-                  data-cy="budgetIntervalUnit"
-                >
-                  <option value="">{copy(locale, 'Selecciona…', 'Select…')}</option>
-                  <option value="DAY">{copy(locale, 'Días', 'Days')}</option>
-                  <option value="WEEK">{copy(locale, 'Semanas', 'Weeks')}</option>
-                  <option value="MONTH">{copy(locale, 'Meses', 'Months')}</option>
-                  <option value="QUARTER">{copy(locale, 'Trimestres', 'Quarters')}</option>
-                  <option value="YEAR">{copy(locale, 'Años', 'Years')}</option>
-                </Input>
-              </div>
-              {intervalUnit !== 'DAY' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-alignment">{copy(locale, 'Modo de calendario', 'Calendar mode')}</Label>
-                  <Input
-                    id="budget-alignment"
-                    type="select"
-                    value={alignment}
-                    onChange={event => setAlignment(event.target.value as Alignment)}
-                    disabled={submitting}
-                    data-cy="budgetCalendarMode"
-                  >
-                    <option value="ANCHORED">{copy(locale, 'Desde una fecha específica', 'From a specific date')}</option>
-                    <option value="NATURAL">{copy(locale, 'Calendario natural', 'Natural calendar')}</option>
-                    <option value="CUSTOM">{copy(locale, 'Calendario personalizado', 'Custom calendar')}</option>
-                  </Input>
-                </div>
-              ) : null}
-              {alignment === 'ANCHORED' || intervalUnit === 'DAY' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-anchor-date">{copy(locale, 'Fecha de inicio', 'Start date')}</Label>
-                  <Input
-                    id="budget-anchor-date"
-                    type="date"
-                    value={anchorDate}
-                    onChange={event => setAnchorDate(event.target.value)}
-                    disabled={submitting}
-                    data-cy="budgetStartDate"
-                  />
-                  <div className="form-text">
-                    {copy(
-                      locale,
-                      'Puedes empezar en una fecha pasada, actual o futura.',
-                      'You can start on a past, current, or future date.',
-                    )}
-                  </div>
-                </div>
-              ) : null}
-              {alignment === 'NATURAL' && intervalUnit === 'WEEK' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-natural-week">{copy(locale, 'Semana ISO', 'ISO week')}</Label>
-                  <Input
-                    id="budget-natural-week"
-                    type="week"
-                    value={naturalWeek}
-                    onChange={event => setNaturalWeek(event.target.value)}
-                    disabled={submitting}
-                  />
-                </div>
-              ) : null}
-              {alignment === 'NATURAL' && intervalUnit === 'MONTH' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-natural-month">{copy(locale, 'Mes', 'Month')}</Label>
-                  <Input
-                    id="budget-natural-month"
-                    type="month"
-                    value={naturalMonth}
-                    onChange={event => setNaturalMonth(event.target.value)}
-                    disabled={submitting}
-                  />
-                </div>
-              ) : null}
-              {alignment === 'NATURAL' && intervalUnit === 'QUARTER' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-natural-quarter">{copy(locale, 'Trimestre', 'Quarter')}</Label>
-                  <Input
-                    id="budget-natural-quarter"
-                    type="select"
-                    value={naturalQuarter}
-                    onChange={event => setNaturalQuarter(event.target.value)}
-                    disabled={submitting}
-                  >
-                    {[0, 1, 2, 3].map(quarter => {
-                      const year = Number(naturalYear) || Number(today.slice(0, 4));
-                      return <option key={quarter} value={`${year}-Q${quarter + 1}`}>{`${year} · Q${quarter + 1}`}</option>;
-                    })}
-                  </Input>
-                </div>
-              ) : null}
-              {alignment === 'NATURAL' && intervalUnit === 'QUARTER' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-natural-quarter-year">{copy(locale, 'Año', 'Year')}</Label>
-                  <Input
-                    id="budget-natural-quarter-year"
-                    type="number"
-                    min="1900"
-                    max="9999"
-                    value={naturalYear}
-                    onChange={event => {
-                      const next = event.target.value;
-                      setNaturalYear(next);
-                      const currentQuarter = naturalQuarter.slice(-2) || 'Q1';
-                      setNaturalQuarter(`${next}-${currentQuarter}`);
-                    }}
-                    disabled={submitting}
-                  />
-                </div>
-              ) : null}
-              {alignment === 'NATURAL' && intervalUnit === 'YEAR' ? (
-                <div className="col-12 col-md-3">
-                  <Label for="budget-natural-year">{copy(locale, 'Año', 'Year')}</Label>
-                  <Input
-                    id="budget-natural-year"
-                    type="number"
-                    min="1900"
-                    max="9999"
-                    value={naturalYear}
-                    onChange={event => setNaturalYear(event.target.value)}
-                    disabled={submitting}
-                  />
-                </div>
-              ) : null}
-              {alignment === 'CUSTOM' && intervalUnit === 'WEEK' ? (
-                <>
-                  <div className="col-12 col-md-3">
-                    <Label for="budget-custom-week">{copy(locale, 'Primer ciclo completo', 'First complete cycle')}</Label>
-                    <Input
-                      id="budget-custom-week"
-                      type="week"
-                      value={customWeek}
-                      onChange={event => setCustomWeek(event.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div className="col-12 col-md-3">
-                    <Label for="budget-custom-weekday">{copy(locale, 'La semana comienza', 'Week starts on')}</Label>
-                    <Input
-                      id="budget-custom-weekday"
-                      type="select"
-                      value={customWeekday}
-                      onChange={event => setCustomWeekday(event.target.value)}
-                      disabled={submitting}
-                    >
-                      {weekdays.map(([value, spanish, english]) => (
-                        <option key={value} value={value}>
-                          {copy(locale, spanish, english)}
-                        </option>
-                      ))}
-                    </Input>
-                  </div>
-                </>
-              ) : null}
-              {alignment === 'CUSTOM' && ['MONTH', 'QUARTER'].includes(intervalUnit) ? (
-                <>
-                  <div className="col-12 col-md-3">
-                    <Label for="budget-custom-cycle-month">{copy(locale, 'Mes del primer ciclo', 'First cycle month')}</Label>
-                    <Input
-                      id="budget-custom-cycle-month"
-                      type="month"
-                      value={intervalUnit === 'MONTH' ? customMonth : customQuarter}
-                      onChange={event =>
-                        intervalUnit === 'MONTH' ? setCustomMonth(event.target.value) : setCustomQuarter(event.target.value)
-                      }
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div className="col-12 col-md-3">
-                    <Label for="budget-custom-day">{copy(locale, 'Día recurrente', 'Recurring day')}</Label>
-                    <Input
-                      id="budget-custom-day"
-                      type="select"
-                      value={customDayOfMonth}
-                      onChange={event => setCustomDayOfMonth(event.target.value)}
-                      disabled={submitting}
-                    >
-                      {Array.from({ length: 31 }, (_, index) => index + 1).map(day => (
-                        <option key={day} value={day}>
-                          {day}
-                        </option>
-                      ))}
-                    </Input>
-                  </div>
-                </>
-              ) : null}
-              {alignment === 'CUSTOM' && intervalUnit === 'YEAR' ? (
-                <>
-                  <div className="col-12 col-md-3">
-                    <Label for="budget-custom-year">{copy(locale, 'Año del primer ciclo', 'First cycle year')}</Label>
-                    <Input
-                      id="budget-custom-year"
-                      type="number"
-                      min="1900"
-                      max="9999"
-                      value={customYear}
-                      onChange={event => setCustomYear(event.target.value)}
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div className="col-6 col-md-2">
-                    <Label for="budget-custom-year-month">{copy(locale, 'Mes', 'Month')}</Label>
-                    <Input
-                      id="budget-custom-year-month"
-                      type="select"
-                      value={customYearMonth}
-                      onChange={event => setCustomYearMonth(event.target.value)}
-                      disabled={submitting}
-                    >
-                      {Array.from({ length: 12 }, (_, index) => index + 1).map(month => (
-                        <option key={month} value={month}>
-                          {month}
-                        </option>
-                      ))}
-                    </Input>
-                  </div>
-                  <div className="col-6 col-md-2">
-                    <Label for="budget-custom-year-day">{copy(locale, 'Día recurrente', 'Recurring day')}</Label>
-                    <Input
-                      id="budget-custom-year-day"
-                      type="select"
-                      value={customDayOfMonth}
-                      onChange={event => setCustomDayOfMonth(event.target.value)}
-                      disabled={submitting}
-                    >
-                      {Array.from({ length: 31 }, (_, index) => index + 1).map(day => (
-                        <option key={day} value={day}>
-                          {day}
-                        </option>
-                      ))}
-                    </Input>
-                  </div>
-                </>
-              ) : null}
-              {alignment === 'CUSTOM' && ['MONTH', 'QUARTER'].includes(intervalUnit) && numericCustomDay >= 29 ? (
-                <div className="col-12">
-                  <p className="small text-muted mb-0" data-cy="budgetMonthEndHint">
-                    {copy(
-                      locale,
-                      `En los meses que no tengan día ${numericCustomDay}, el periodo comenzará el último día disponible. Cuando vuelva a existir el día ${numericCustomDay}, se utilizará nuevamente.`,
-                      `In months without day ${numericCustomDay}, the period starts on the last available day. It returns to day ${numericCustomDay} whenever available.`,
-                    )}
-                  </p>
-                </div>
-              ) : null}
-              {alignment === 'CUSTOM' && intervalUnit === 'YEAR' && Number(customYearMonth) === 2 && numericCustomDay === 29 ? (
-                <div className="col-12">
-                  <p className="small text-muted mb-0" data-cy="budgetLeapYearHint">
-                    {copy(
-                      locale,
-                      'En los años no bisiestos se utilizará el 28 de febrero. En los años bisiestos se recuperará el 29.',
-                      'In non-leap years February 28 is used. February 29 returns in leap years.',
-                    )}
-                  </p>
-                </div>
-              ) : null}
-              <div className="col-12 col-md-6">
-                <Label for="budget-recurrence">{copy(locale, 'Frecuencia', 'Frequency')}</Label>
-                <Input
-                  id="budget-recurrence"
-                  type="select"
-                  value={recurrenceMode}
-                  onChange={event => setRecurrenceMode(event.target.value as RecurrenceMode)}
-                  disabled={submitting}
-                >
-                  <option value="RECURRING">{copy(locale, 'Recurrente', 'Recurring')}</option>
-                  <option value="ONCE">{copy(locale, 'Una sola vez', 'One time')}</option>
-                </Input>
-              </div>
-              {recurrenceMode === 'RECURRING' ? (
-                <>
-                  <div className="col-12 col-md-6">
-                    <Label for="budget-termination">{copy(locale, 'Finalización', 'Ends')}</Label>
-                    <Input
-                      id="budget-termination"
-                      type="select"
-                      value={termination}
-                      onChange={event => setTermination(event.target.value as Termination)}
-                      disabled={submitting}
-                    >
-                      <option value="NONE">{copy(locale, 'Sin fecha final', 'No end date')}</option>
-                      <option value="AFTER_N_PERIODS">{copy(locale, 'Después de períodos completos', 'After complete periods')}</option>
-                      <option value="END_DATE">{copy(locale, 'En una fecha de límite completa', 'At a complete boundary date')}</option>
-                    </Input>
-                  </div>
-                  {termination === 'AFTER_N_PERIODS' ? (
-                    <div className="col-12 col-md-6">
-                      <Label for="budget-termination-count">{copy(locale, 'Número de períodos', 'Number of periods')}</Label>
-                      <Input
-                        id="budget-termination-count"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={terminationCount}
-                        onChange={event => setTerminationCount(event.target.value)}
-                        disabled={submitting}
-                      />
-                    </div>
-                  ) : null}
-                  {termination === 'END_DATE' ? (
-                    <div className="col-12 col-md-6">
-                      <Label for="budget-termination-date">{copy(locale, 'Fecha de límite', 'Boundary date')}</Label>
-                      <Input
-                        id="budget-termination-date"
-                        type="date"
-                        min={effectiveAnchorDate || today}
-                        value={terminationDate}
-                        onChange={event => setTerminationDate(event.target.value)}
-                        disabled={submitting}
-                      />
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-            <div className="mt-4 border rounded-2 p-3 bg-light" aria-live="polite" data-cy="budgetCalendarPreview">
-              <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
-                <strong>{copy(locale, 'Vista previa del calendario', 'Calendar preview')}</strong>
-                {previewLoading ? <span className="small text-muted">{copy(locale, 'Actualizando…', 'Updating…')}</span> : null}
-              </div>
-              <p className="small text-muted mb-2">{recurrenceSummary()}</p>
-              {previewError ? (
-                <div className="small text-danger" role="alert">
-                  {previewError}
-                </div>
-              ) : null}
-              {preview?.periods.length ? (
-                <ol className="small mb-0 ps-3">
-                  {preview.periods.map(period => (
-                    <li key={period.index}>{dateRange(period.startInclusive, period.endExclusive, locale)}</li>
-                  ))}
-                </ol>
-              ) : null}
-            </div>
-          </ProductSection>
-
+          <BudgetCalendarSection
+            calendar={calendar}
+            locale={locale}
+            submitting={submitting}
+            today={today}
+            effectiveAnchorDate={effectiveAnchorDate}
+            numericCustomDay={numericCustomDay}
+            preview={preview}
+            previewError={previewError}
+            previewLoading={previewLoading}
+            recurrenceSummary={recurrenceSummary}
+          />
           <BudgetScopeSection
             locale={locale}
             submitting={submitting}

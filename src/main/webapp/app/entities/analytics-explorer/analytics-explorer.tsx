@@ -74,6 +74,50 @@ const idFrom = (value: string | null): number | null => {
 const editingSignature = (definition: SemanticQueryDefinition, visualization: ExplorerVisualization, seriesLimit: number | 'ALL') =>
   JSON.stringify({ definition, visualization, seriesLimit });
 
+const useEditingCancellation = ({
+  definition,
+  editing,
+  visualization,
+  seriesLimit,
+  locale,
+  navigate,
+}: {
+  definition: SemanticQueryDefinition | null;
+  editing: EditingWidget | null;
+  visualization: ExplorerVisualization;
+  seriesLimit: number | 'ALL';
+  locale: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) => {
+  const editDirty = !!definition && !!editing && editing.baseline !== editingSignature(definition, visualization, seriesLimit);
+
+  useEffect(() => {
+    if (!editDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [editDirty]);
+
+  return () => {
+    if (!editing) return;
+    if (
+      editDirty &&
+      !window.confirm(
+        copy(
+          locale,
+          'Tienes cambios sin guardar. ¿Cancelar la edición y descartarlos?',
+          'You have unsaved changes. Cancel editing and discard them?',
+        ),
+      )
+    )
+      return;
+    navigate(`/analytics/dashboards/personal/${editing.dashboardId}`);
+  };
+};
+
 /** One Explorer, one canonical AST, one semantic executor. Visual and written authoring are alternate views only. */
 const AnalyticsExplorer = () => {
   const locale = useAppSelector(state => state.locale.currentLocale) || 'en';
@@ -376,33 +420,7 @@ const AnalyticsExplorer = () => {
     setDiagnostics([]);
   };
 
-  const editDirty = !!definition && !!editing && editing.baseline !== editingSignature(definition, visualization, seriesLimit);
-
-  useEffect(() => {
-    if (!editDirty) return;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [editDirty]);
-
-  const cancelEditing = () => {
-    if (!editing) return;
-    if (
-      editDirty &&
-      !window.confirm(
-        copy(
-          locale,
-          'Tienes cambios sin guardar. ¿Cancelar la edición y descartarlos?',
-          'You have unsaved changes. Cancel editing and discard them?',
-        ),
-      )
-    )
-      return;
-    navigate(`/analytics/dashboards/personal/${editing.dashboardId}`);
-  };
+  const cancelEditing = useEditingCancellation({ definition, editing, visualization, seriesLimit, locale, navigate });
 
   const reloadEditing = () => {
     if (!editing) return;
