@@ -142,8 +142,8 @@ const DashboardCreationDialog = ({
             <p className="small text-muted">
               {copy(
                 locale,
-                'El dashboard iniciará vacío. Podrás añadir visualizaciones desde el Explorador de métricas en una próxima versión.',
-                'The dashboard starts empty. You will be able to add visualizations from Metric Explorer in an upcoming version.',
+                'El dashboard iniciará vacío. Agrega visualizaciones desde el Explorador de métricas.',
+                'The dashboard starts empty. Add visualizations from Metric Explorer.',
               )}
             </p>
           )}

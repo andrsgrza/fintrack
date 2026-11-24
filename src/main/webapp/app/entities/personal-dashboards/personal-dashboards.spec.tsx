@@ -301,6 +301,20 @@ describe('personal dashboards V2-3', () => {
     expect(document.querySelector('[data-cy="location"]')?.textContent).toBe('/analytics/dashboards/personal/44');
   });
 
+  it.each([
+    ['en', 'The dashboard starts empty. Add visualizations from Metric Explorer.'],
+    ['es', 'El dashboard iniciará vacío. Agrega visualizaciones desde el Explorador de métricas.'],
+  ])('explains how to add visualizations to a new blank dashboard in %s', async (locale, expectedCopy) => {
+    useAppSelector.mockReturnValue(locale);
+    renderGallery();
+    await screen.findByRole('heading', { name: locale === 'es' ? 'Recomendados' : 'Recommended' });
+
+    fireEvent.click(screen.getAllByRole('button', { name: locale === 'es' ? 'Crear dashboard' : 'Create dashboard' })[0]);
+
+    expect(screen.getByText(expectedCopy)).toBeTruthy();
+    expect(screen.queryByText(/próxima versión|upcoming version/i)).toBeNull();
+  });
+
   it('surfaces duplicate-name failures without navigating away from the creation flow', async () => {
     createPersonalDashboard.mockRejectedValueOnce(new Error('A personal dashboard with that name already exists.'));
     renderGallery();

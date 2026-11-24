@@ -197,11 +197,15 @@ describe('Recommended dashboards V2 real financial acceptance', () => {
   /** A fixed global navbar is repeated by Chromium while Cypress stitches a full-page image. Hide only that chrome
    * during the capture, then restore it immediately, so the dashboard itself remains readable evidence. */
   const captureDashboardPage = (name: string) => {
-    cy.get('[data-cy="navbar"]').invoke('css', 'visibility', 'hidden');
-    cy.get('.ribbon').invoke('css', 'visibility', 'hidden');
+    const setOptionalChromeVisibility = (selector: string, visibility: 'hidden' | 'visible') =>
+      cy.document().then(document => Cypress.$(document).find(selector).css('visibility', visibility));
+
+    setOptionalChromeVisibility('[data-cy="navbar"]', 'hidden');
+    // The development ribbon is intentionally absent from the isolated production application.
+    setOptionalChromeVisibility('.ribbon', 'hidden');
     cy.screenshot(name, { capture: 'fullPage' });
-    cy.get('[data-cy="navbar"]').invoke('css', 'visibility', 'visible');
-    cy.get('.ribbon').invoke('css', 'visibility', 'visible');
+    setOptionalChromeVisibility('[data-cy="navbar"]', 'visible');
+    setOptionalChromeVisibility('.ribbon', 'visible');
   };
 
   before(() => {

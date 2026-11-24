@@ -1,6 +1,6 @@
-# Analytics V2.5 — Metric Explorer and dashboards
+# Analytics V2 — Metric Explorer and dashboards
 
-**Current-state document — 2026-11-04.** This document records the implementation after the
+**Current-state document — 2026-11-23.** This document records the implementation after the
 semantic runtime described in [ANALYTICS-REDESIGN-4.md](ANALYTICS-REDESIGN-4.md). It supersedes
 older “V2.5 pending” notes. The V2.1–V2.4 documents remain the design and regression history for
 their respective slices.
@@ -15,7 +15,11 @@ This document reconciles the implementation commits after the last prior Analyti
 - `df1fa5d` — recommended dashboards and shared result presentation;
 - `3fa1bd9` — personal dashboard persistence, gallery, and template copy;
 - `d8fe9c7` — Metric Explorer-to-widget save/edit workflow; and
-- `58587eb` — ordered grouping UX, local temporal overrides, and widget-save compatibility.
+- `58587eb` — ordered grouping UX, local temporal overrides, and widget-save compatibility;
+- `67a2ab2` — complete personal-widget lifecycle and idempotent duplication;
+- `38a9837` — one default-dashboard preference supporting both official and personal dashboards;
+- `27fb7b2` — one visualization-compatibility contract at authoring, rendering, save, and persistence boundaries; and
+- `9c1b5bf` — shared detailed and pivot result tables.
 
 ## One canonical analytical contract
 
@@ -105,9 +109,10 @@ The personal-dashboard command API is owner-scoped and deliberately is not gener
 
 - `GET/POST /api/personal-dashboards`
 - `POST /api/personal-dashboards/from-template`
-- `GET/PUT/DELETE /api/personal-dashboards/{dashboardId}`
+- `GET/PUT/DELETE /api/personal-dashboards/{dashboardId}`, plus `PATCH /{dashboardId}/metadata` and `POST /{dashboardId}/duplicate`
+- `GET/PUT /api/personal-dashboards/default`
 - `POST /api/personal-dashboards/{dashboardId}/widgets`
-- `PUT/DELETE /api/personal-dashboards/{dashboardId}/widgets/{widgetId}`
+- `PUT/DELETE /api/personal-dashboards/{dashboardId}/widgets/{widgetId}`, plus `POST /{widgetId}/duplicate`
 - `PUT /api/personal-dashboards/{dashboardId}/layout`
 
 The aggregate limits a user to 20 dashboards and a dashboard to 16 widgets. A root `@Version`
@@ -116,9 +121,38 @@ use owner-scoped idempotency receipts. A widget stores a validated canonical sem
 visualization type/options, layout width, position, and visibility — never a duplicate executor or
 financial data cache.
 
+There is exactly one default-dashboard preference per owner. It can name either an owned personal
+dashboard or one of the three stable official template identifiers. A new user falls back to
+**Resumen financiero**; selecting an official template does not create a copy. Creating, copying,
+or duplicating a dashboard does not silently replace the default. If the selected personal
+dashboard is deleted, the preference safely falls back to the official financial overview.
+
+Personal widgets are independent children of their dashboard. Their overflow menu supports
+metadata editing, semantic-query editing through Metric Explorer, duplication, and confirmed
+deletion; hide/show remains a layout operation. These commands preserve owner isolation, the
+dashboard version, and the original widget's identity. Official widgets remain immutable.
+
 The shared result adapter serves both Explorer and dashboards. Dashboards may collapse detail
 tables for presentation, but preserve all server rows through **Ver datos** and keep the same
 legend, accessibility, currency, availability, and financial-correctness behavior.
+
+The shared table adapter offers **Detalle** and, for two ordered groupings, **Tabla dinámica**.
+The first grouping remains the row dimension and the second the pivot columns; changing a table
+mode is a presentation choice and never re-executes or rewrites the semantic query.
+
+## One visualization compatibility contract
+
+The frontend and backend derive visualization eligibility from the same canonical definition:
+
+- **KPI** requires no grouping; **Línea** requires an eligible temporal grouping in either position;
+- **Barras** requires a grouping and grouped bars require a comparison grouping or multiple calculations;
+- stacked bars reject non-additive averages, overlapping tags, and historical point-in-time series;
+- donuts require one additive result and one non-temporal, non-overlapping grouping, and reject
+  percentages and negative returned values; and
+- tables remain available for every valid result.
+
+This is enforced when authoring, rendering, saving, updating, and loading widgets. It does not
+rewrite the ordered query dimensions to satisfy a chart.
 
 ### Personal dashboard layout customization
 
@@ -173,7 +207,10 @@ Relevant regression coverage is located in:
 - Cypress `analytics/personal-dashboard-widgets-real.cy.ts`,
   `analytics/personal-dashboards-real.cy.ts`,
   `analytics/personal-dashboard-layout-real.cy.ts`, and
-  `analytics/recommended-dashboards-real.cy.ts` for real browser-to-REST coverage.
+  `analytics/recommended-dashboards-real.cy.ts`, plus
+  `analytics/personal-widget-lifecycle-real.cy.ts`,
+  `analytics/personal-dashboard-management-real.cy.ts`, and
+  `analytics/official-dashboard-default-real.cy.ts` for real browser-to-REST coverage.
 
 The focused widget regression covers both `ROOT_CATEGORY + MONTH + LINE` and `MONTH +
 ROOT_CATEGORY + LINE`, save → reload → edit, and invalid non-temporal line queries that must still
