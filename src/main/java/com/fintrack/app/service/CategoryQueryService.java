@@ -102,8 +102,7 @@ public class CategoryQueryService extends QueryService<Category> {
                 ),
                 buildSpecification(criteria.getSubscriptionsId(), root ->
                     root.join(Category_.subscriptions, JoinType.LEFT).get(FinancialSubscription_.id)
-                ),
-                buildSpecification(criteria.getBudgetsId(), root -> root.join(Category_.budgets, JoinType.LEFT).get(Budget_.id))
+                )
             );
             if (!currentUserService.isAdmin()) {
                 specification = specification.and((root, query, criteriaBuilder) ->

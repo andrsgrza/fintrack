@@ -9,6 +9,7 @@ import com.fintrack.app.repository.ApiIngestionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.TransactionIngestionDTO;
 import com.fintrack.app.service.mapper.TransactionIngestionMapper;
@@ -50,6 +51,8 @@ public class TransactionIngestionService {
 
     private final InternalTransferRepository internalTransferRepository;
 
+    private final BudgetThresholdNotificationService budgetThresholdNotificationService;
+
     public TransactionIngestionService(
         TransactionIngestionRepository transactionIngestionRepository,
         TransactionIngestionMapper transactionIngestionMapper,
@@ -57,7 +60,8 @@ public class TransactionIngestionService {
         FinancialAccountService financialAccountService,
         ApiIngestionRepository apiIngestionRepository,
         FinancialTransactionRepository financialTransactionRepository,
-        InternalTransferRepository internalTransferRepository
+        InternalTransferRepository internalTransferRepository,
+        BudgetThresholdNotificationService budgetThresholdNotificationService
     ) {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.transactionIngestionMapper = transactionIngestionMapper;
@@ -66,6 +70,7 @@ public class TransactionIngestionService {
         this.apiIngestionRepository = apiIngestionRepository;
         this.financialTransactionRepository = financialTransactionRepository;
         this.internalTransferRepository = internalTransferRepository;
+        this.budgetThresholdNotificationService = budgetThresholdNotificationService;
     }
 
     /**
@@ -201,12 +206,19 @@ public class TransactionIngestionService {
         if (transactionIngestion.isEmpty()) {
             return false;
         }
-        apiIngestionRepository.deleteByTransactionIngestionId(id);
-        internalTransferRepository.deleteByTransactionIngestionIdInEitherRole(id);
-        financialTransactionRepository.deleteTagLinksByTransactionIngestionId(id);
-        financialTransactionRepository.deleteByTransactionIngestionId(id);
-        transactionIngestionRepository.deleteById(id);
-        return true;
+        return budgetThresholdNotificationService.capture(
+            ownerLogin(transactionIngestion.orElseThrow()),
+            "TRANSACTION_INGESTION_DELETE",
+            () -> {
+                apiIngestionRepository.deleteByTransactionIngestionId(id);
+                internalTransferRepository.deleteByTransactionIngestionIdInEitherRole(id);
+                financialTransactionRepository.deleteTagLinksByTransactionIngestionId(id);
+                financialTransactionRepository.deleteByTransactionIngestionId(id);
+                transactionIngestionRepository.deleteById(id);
+                return true;
+            },
+            ignored -> String.valueOf(id)
+        );
     }
 
     /**
@@ -217,11 +229,19 @@ public class TransactionIngestionService {
     public void deleteAllForAccount(FinancialAccount account) {
         Long accountId = requireAccountId(account);
         LOG.debug("Request to delete all TransactionIngestions for FinancialAccount : {}", accountId);
-        apiIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
-        internalTransferRepository.deleteByTransactionIngestionAccountIdInEitherRole(accountId);
-        financialTransactionRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
-        financialTransactionRepository.deleteByTransactionIngestionAccountId(accountId);
-        transactionIngestionRepository.deleteByAccountId(accountId);
+        budgetThresholdNotificationService.capture(
+            ownerLogin(account),
+            "TRANSACTION_INGESTION_ACCOUNT_DELETE",
+            () -> {
+                apiIngestionRepository.deleteByTransactionIngestionAccountId(accountId);
+                internalTransferRepository.deleteByTransactionIngestionAccountIdInEitherRole(accountId);
+                financialTransactionRepository.deleteTagLinksByTransactionIngestionAccountId(accountId);
+                financialTransactionRepository.deleteByTransactionIngestionAccountId(accountId);
+                transactionIngestionRepository.deleteByAccountId(accountId);
+                return accountId;
+            },
+            deletedAccountId -> String.valueOf(deletedAccountId)
+        );
     }
 
     private List<TransactionIngestion> findAccessibleEntities() {
@@ -246,6 +266,17 @@ public class TransactionIngestionService {
             throw new IllegalArgumentException("Account is required");
         }
         return account.getId();
+    }
+
+    private String ownerLogin(TransactionIngestion transactionIngestion) {
+        return ownerLogin(transactionIngestion == null ? null : transactionIngestion.getAccount());
+    }
+
+    private String ownerLogin(FinancialAccount account) {
+        if (account == null || account.getUser() == null || account.getUser().getLogin() == null) {
+            throw new IllegalArgumentException("Financial account owner is required");
+        }
+        return account.getUser().getLogin();
     }
 
     private FinancialAccount resolveAccountForCreate(FinancialAccountDTO accountDTO) {

@@ -65,7 +65,7 @@ public class TransactionRule implements Serializable {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(
-        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions", "budgets" },
+        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions" },
         allowSetters = true
     )
     private Category resultingCategory;
@@ -76,7 +76,7 @@ public class TransactionRule implements Serializable {
         joinColumns = @JoinColumn(name = "transaction_rule_id"),
         inverseJoinColumns = @JoinColumn(name = "resulting_tags_id")
     )
-    @JsonIgnoreProperties(value = { "user", "financialTransactions", "transactionRules", "subscriptions", "budgets" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "user", "financialTransactions", "transactionRules", "subscriptions" }, allowSetters = true)
     private Set<Tag> resultingTags = new HashSet<>();
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "transactionRule")

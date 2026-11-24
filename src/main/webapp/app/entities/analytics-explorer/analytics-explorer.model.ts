@@ -1,5 +1,13 @@
 export type SemanticField = string;
-export type SemanticPredicateOperator = 'EQUALS' | 'IN' | 'DESCENDANT_OF' | 'IS_UNCATEGORIZED' | 'HAS_ANY' | 'HAS_ALL' | 'HAS_NONE';
+export type SemanticPredicateOperator =
+  | 'EQUALS'
+  | 'IN'
+  | 'DESCENDANT_OF'
+  | 'DESCENDANT_OF_ANY'
+  | 'IS_UNCATEGORIZED'
+  | 'HAS_ANY'
+  | 'HAS_ALL'
+  | 'HAS_NONE';
 
 export type SemanticAggregateCapability = {
   function: 'COUNT' | 'SUM' | 'AVG' | 'NET';
@@ -106,7 +114,7 @@ export type SemanticAnalyticsResult = {
       value: number | null;
       unit: 'COUNT' | 'MONEY' | 'PERCENT';
       availability: 'COMPLETE' | 'ZERO' | 'NO_DATA' | 'UNAVAILABLE' | 'NOT_APPLICABLE' | 'PARTIAL';
-      /** True only for a valid empty calendar period completed by the semantic backend. */
+      /** True only for a scope-applicable no-observation result derived by the semantic backend. */
       derived?: boolean;
     }>;
   }>;

@@ -1,5 +1,6 @@
 package com.fintrack.app.service.analytics;
 
+import com.fintrack.app.domain.enumeration.CategoryType;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -17,7 +18,7 @@ final class SemanticAnalyticsReferenceCatalog {
     static final String UNCATEGORIZED_ID = "UNCATEGORIZED";
     static final String DIRECT_ASSIGNMENT_ID = "DIRECT_ASSIGNMENT";
 
-    record CategoryReference(Long id, String name, String color, Boolean active, Long parentId) {}
+    record CategoryReference(Long id, String name, String color, Boolean active, Long parentId, CategoryType categoryType) {}
 
     record TagReference(Long id, String name, String color, Boolean active) {}
 
@@ -164,7 +165,7 @@ final class SemanticAnalyticsReferenceCatalog {
         );
     }
 
-    private List<String> categoryPath(Long categoryId) {
+    List<String> categoryPath(Long categoryId) {
         List<String> reversed = new ArrayList<>();
         Long current = categoryId;
         Set<Long> visited = new HashSet<>();

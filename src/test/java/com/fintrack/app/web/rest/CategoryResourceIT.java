@@ -13,7 +13,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
@@ -29,7 +28,6 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
-import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
@@ -117,9 +115,6 @@ class CategoryResourceIT {
 
     @Autowired
     private FinancialSubscriptionRepository financialSubscriptionRepository;
-
-    @Autowired
-    private BudgetRepository budgetRepository;
 
     @Autowired
     private TransactionRuleRepository transactionRuleRepository;
@@ -841,28 +836,6 @@ class CategoryResourceIT {
 
         // Get all the categoryList where parentCategory equals to (parentCategoryId + 1)
         defaultCategoryShouldNotBeFound("parentCategoryId.equals=" + (parentCategoryId + 1));
-    }
-
-    @Test
-    @Transactional
-    void getAllCategoriesByBudgetsIsEqualToSomething() throws Exception {
-        Budget budgets;
-        if (TestUtil.findAll(em, Budget.class).isEmpty()) {
-            categoryRepository.saveAndFlush(category);
-            budgets = BudgetResourceIT.createEntity(em);
-        } else {
-            budgets = TestUtil.findAll(em, Budget.class).get(0);
-        }
-        em.persist(budgets);
-        em.flush();
-        category.addBudgets(budgets);
-        categoryRepository.saveAndFlush(category);
-        Long budgetsId = budgets.getId();
-        // Get all the categoryList where budgets equals to budgetsId
-        defaultCategoryShouldBeFound("budgetsId.equals=" + budgetsId);
-
-        // Get all the categoryList where budgets equals to (budgetsId + 1)
-        defaultCategoryShouldNotBeFound("budgetsId.equals=" + (budgetsId + 1));
     }
 
     private void defaultCategoryFiltering(String shouldBeFound, String shouldNotBeFound) throws Exception {
@@ -2179,26 +2152,6 @@ class CategoryResourceIT {
 
     @Test
     @Transactional
-    void deleteLeafCategoryUsedByBudgetUnlinksAndPreservesBudget() throws Exception {
-        Category persistedCategory = persistCategory();
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addCategories(managedCategoryReference(persistedCategory));
-        budgetRepository.saveAndFlush(budget);
-        em.detach(budget);
-
-        restCategoryMockMvc
-            .perform(delete(ENTITY_API_URL_ID, persistedCategory.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
-
-        assertThat(categoryRepository.existsById(persistedCategory.getId())).isFalse();
-        em.clear();
-        Budget persistedBudget = budgetRepository.findById(budget.getId()).orElseThrow();
-        assertThat(persistedBudget.getCategories()).isEmpty();
-        insertedCategory = null;
-    }
-
-    @Test
-    @Transactional
     void deleteLeafCategoryUsedByTransactionRuleUnlinksAndDeactivatesRule() throws Exception {
         Category persistedCategory = persistCategory();
         TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
@@ -2244,10 +2197,6 @@ class CategoryResourceIT {
         financialSubscription.setCategory(managedCategoryReference(persistedCategory));
         financialSubscriptionRepository.saveAndFlush(financialSubscription);
 
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addCategories(managedCategoryReference(persistedCategory));
-        budgetRepository.saveAndFlush(budget);
-
         TransactionRule transactionRule = TransactionRuleResourceIT.createEntity(em);
         transactionRule.setResultingCategory(managedCategoryReference(persistedCategory));
         transactionRule.setActive(true);
@@ -2255,7 +2204,6 @@ class CategoryResourceIT {
 
         em.detach(financialTransaction);
         em.detach(financialSubscription);
-        em.detach(budget);
         em.detach(transactionRule);
 
         restCategoryMockMvc
@@ -2267,7 +2215,6 @@ class CategoryResourceIT {
 
         assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getCategory()).isNull();
         assertThat(financialSubscriptionRepository.findById(financialSubscription.getId()).orElseThrow().getCategory()).isNull();
-        assertThat(budgetRepository.findById(budget.getId()).orElseThrow().getCategories()).isEmpty();
         TransactionRule persistedRule = transactionRuleRepository.findById(transactionRule.getId()).orElseThrow();
         assertThat(persistedRule.getResultingCategory()).isNull();
         assertThat(persistedRule.getActive()).isFalse();

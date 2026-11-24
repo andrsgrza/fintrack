@@ -241,8 +241,8 @@ CAT-UX-3.5C/3.5D/3.5E extends `category-ux.spec.tsx` and `category.cy.ts` with t
 # Category
 ./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/category.cy.ts
 
-# Budget
-./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/budget.cy.ts
+# Budget (BUDGET-5A a BUDGET-5B-C, aplicación y PostgreSQL aislados)
+./npmw run e2e:cypress -- --config baseUrl=http://localhost:18080 --spec src/test/javascript/cypress/e2e/entity/budget-overview-real.cy.ts
 
 # FinancialSubscription
 ./npmw run e2e:cypress -- --spec src/test/javascript/cypress/e2e/entity/financial-subscription.cy.ts
@@ -1283,7 +1283,9 @@ Happy-path CRUD, required-field checks, criteria per field (`name`, `description
 
 ---
 
-## Budget
+## Budget — historical V1 coverage (superseded)
+
+> **Superseded by [BUDGET-1](BUDGET-1.md).** The generated CRUD counts and Cypress route coverage below describe code that was intentionally removed. Current BUDGET-1 coverage is `BudgetPeriodCalculatorTest`, `BudgetCreationServiceTest`, and PostgreSQL-backed `BudgetResourceIT`.
 
 **Ownership model:** direct `user` (required). Normal users see/edit/delete only their budgets. `ROLE_ADMIN` bypasses filters.
 

@@ -1,6 +1,5 @@
 package com.fintrack.app.domain;
 
-import static com.fintrack.app.domain.BudgetTestSamples.*;
 import static com.fintrack.app.domain.FinancialSubscriptionTestSamples.*;
 import static com.fintrack.app.domain.FinancialTransactionTestSamples.*;
 import static com.fintrack.app.domain.TagTestSamples.*;
@@ -92,27 +91,5 @@ class TagTest {
         tag.setSubscriptions(new HashSet<>());
         assertThat(tag.getSubscriptions()).doesNotContain(financialSubscriptionBack);
         assertThat(financialSubscriptionBack.getTags()).doesNotContain(tag);
-    }
-
-    @Test
-    void budgetsTest() {
-        Tag tag = getTagRandomSampleGenerator();
-        Budget budgetBack = getBudgetRandomSampleGenerator();
-
-        tag.addBudgets(budgetBack);
-        assertThat(tag.getBudgets()).containsOnly(budgetBack);
-        assertThat(budgetBack.getTags()).containsOnly(tag);
-
-        tag.removeBudgets(budgetBack);
-        assertThat(tag.getBudgets()).doesNotContain(budgetBack);
-        assertThat(budgetBack.getTags()).doesNotContain(tag);
-
-        tag.budgets(new HashSet<>(Set.of(budgetBack)));
-        assertThat(tag.getBudgets()).containsOnly(budgetBack);
-        assertThat(budgetBack.getTags()).containsOnly(tag);
-
-        tag.setBudgets(new HashSet<>());
-        assertThat(tag.getBudgets()).doesNotContain(budgetBack);
-        assertThat(budgetBack.getTags()).doesNotContain(tag);
     }
 }

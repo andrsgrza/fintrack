@@ -60,6 +60,28 @@ public class SemanticAnalyticsValidator {
     }
 
     public SemanticAnalyticsExecutionScope validateOrThrow(SemanticAnalyticsExecutionRequest request) {
+        return validateForOwnerOrThrow(request, currentUserService.getCurrentUserLogin(), timePolicy.today());
+    }
+
+    /**
+     * Used only by {@link SemanticAnalyticsExecutionService}'s typed internal entry point. The caller cannot supply
+     * a raw owner ID and still receives the exact same account/reference validation as an interactive request.
+     */
+    SemanticAnalyticsExecutionScope validateForTrustedOwnerOrThrow(
+        SemanticAnalyticsExecutionRequest request,
+        SemanticAnalyticsTrustedOwnerContext trustedOwner
+    ) {
+        if (trustedOwner == null) {
+            throw new IllegalArgumentException("A trusted semantic execution owner is required.");
+        }
+        return validateForOwnerOrThrow(request, trustedOwner.ownerLogin(), trustedOwner.maximumObservationDate());
+    }
+
+    private SemanticAnalyticsExecutionScope validateForOwnerOrThrow(
+        SemanticAnalyticsExecutionRequest request,
+        String ownerLogin,
+        java.time.LocalDate maximumObservationDate
+    ) {
         List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
         if (request == null) {
             throw new SemanticAnalyticsValidationException(
@@ -68,8 +90,7 @@ public class SemanticAnalyticsValidator {
         }
         validateVersion(request.schemaVersion(), "schemaVersion", diagnostics);
         Optional<SemanticQueryDefinition> definition = validateDefinition(request.definition(), diagnostics);
-        String ownerLogin = currentUserService.getCurrentUserLogin();
-        Optional<ContextResolution> context = validateContext(request.context(), ownerLogin, diagnostics);
+        Optional<ContextResolution> context = validateContext(request.context(), ownerLogin, maximumObservationDate, diagnostics);
         if (definition.isPresent() && context.isPresent()) {
             validateContextSpecificSemantics(definition.orElseThrow(), context.orElseThrow().context(), diagnostics);
         }
@@ -115,7 +136,7 @@ public class SemanticAnalyticsValidator {
     public VisualizationContext normalizeContextOrThrow(VisualizationContext context) {
         List<AnalyticsDiagnostic> diagnostics = new ArrayList<>();
         String ownerLogin = currentUserService.getCurrentUserLogin();
-        Optional<ContextResolution> resolution = validateContext(context, ownerLogin, diagnostics);
+        Optional<ContextResolution> resolution = validateContext(context, ownerLogin, timePolicy.today(), diagnostics);
         if (!diagnostics.isEmpty() || resolution.isEmpty()) {
             throw new SemanticAnalyticsValidationException(diagnostics);
         }
@@ -201,6 +222,7 @@ public class SemanticAnalyticsValidator {
     private Optional<ContextResolution> validateContext(
         VisualizationContext context,
         String ownerLogin,
+        java.time.LocalDate maximumObservationDate,
         List<AnalyticsDiagnostic> diagnostics
     ) {
         if (context == null) {
@@ -208,7 +230,7 @@ public class SemanticAnalyticsValidator {
             return Optional.empty();
         }
         validateVersion(context.schemaVersion(), "context.schemaVersion", diagnostics);
-        Optional<AnalyticsDateRange> dateRange = resolveTime(context.time(), diagnostics);
+        Optional<AnalyticsDateRange> dateRange = resolveTime(context.time(), maximumObservationDate, diagnostics);
         List<FinancialAccount> ownedAccounts = accountRepository.findAllWithToOneRelationshipsByUserLogin(ownerLogin);
         Set<Long> requestedIds = normalizedAccountIds(context.accountIds(), diagnostics);
         Set<CurrencyCode> currencies = normalizedCurrencies(context.currencyCodes(), diagnostics);
@@ -671,7 +693,11 @@ public class SemanticAnalyticsValidator {
         return normalized;
     }
 
-    private Optional<AnalyticsDateRange> resolveTime(VisualizationTime time, List<AnalyticsDiagnostic> diagnostics) {
+    private Optional<AnalyticsDateRange> resolveTime(
+        VisualizationTime time,
+        java.time.LocalDate maximumObservationDate,
+        List<AnalyticsDiagnostic> diagnostics
+    ) {
         if (time == null) {
             diagnostics.add(diagnostic(AnalyticsDiagnosticCode.INVALID_TIME_CONTEXT, "context.time", "A time selection is required."));
             return Optional.empty();
@@ -702,7 +728,7 @@ public class SemanticAnalyticsValidator {
                     );
                     return Optional.empty();
                 }
-                if (time.through().isAfter(timePolicy.today())) {
+                if (time.through().isAfter(maximumObservationDate)) {
                     diagnostics.add(
                         diagnostic(
                             AnalyticsDiagnosticCode.FUTURE_OBSERVATION,
@@ -787,6 +813,7 @@ public class SemanticAnalyticsValidator {
                             SemanticPredicateOperator.EQUALS,
                             SemanticPredicateOperator.IN,
                             SemanticPredicateOperator.DESCENDANT_OF,
+                            SemanticPredicateOperator.DESCENDANT_OF_ANY,
                             SemanticPredicateOperator.IS_UNCATEGORIZED
                         ).contains(operator)
                     ) {

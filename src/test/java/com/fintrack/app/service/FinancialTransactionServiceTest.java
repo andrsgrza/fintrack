@@ -3,6 +3,7 @@ package com.fintrack.app.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.repository.TransactionIngestionRepository;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.FinancialAccountDTO;
 import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.mapper.FinancialTransactionMapper;
@@ -32,6 +34,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -83,6 +86,9 @@ class FinancialTransactionServiceTest {
     @Mock
     private InternalTransferCommandService internalTransferCommandService;
 
+    @Mock
+    private BudgetThresholdNotificationService budgetThresholdNotificationService;
+
     @InjectMocks
     private FinancialTransactionService financialTransactionService;
 
@@ -93,6 +99,9 @@ class FinancialTransactionServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient()
+            .when(budgetThresholdNotificationService.capture(any(), any(), any(), any()))
+            .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(2)).get());
         currentUser = new User();
         currentUser.setId(2L);
         currentUser.setLogin(CURRENT_USER_LOGIN);
@@ -171,7 +180,6 @@ class FinancialTransactionServiceTest {
 
     @Test
     void saveShouldFailWhenAccountIsNotAccessible() {
-        when(financialTransactionMapper.toEntity(financialTransactionDTO)).thenReturn(new FinancialTransaction());
         when(financialAccountService.findAccessibleAccountEntity(20L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> financialTransactionService.save(financialTransactionDTO)).isInstanceOf(IllegalArgumentException.class);

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- FINTRACK has not released the provisional JHipster Budget CRUD. Retire only its tables and rows. -->
+    <changeSet id="20261115100000-1-remove-provisional-budget" author="fintrack">
+        <dropTable tableName="rel_budget__accounts" cascadeConstraints="true"/>
+        <dropTable tableName="rel_budget__categories" cascadeConstraints="true"/>
+        <dropTable tableName="rel_budget__tags" cascadeConstraints="true"/>
+        <dropTable tableName="budget" cascadeConstraints="true"/>
+    </changeSet>
+
+    <changeSet id="20261115100000-2-budget-aggregate" author="fintrack">
+        <createTable tableName="budget" remarks="Owner-scoped budget identity; immutable financial configuration is recorded in budget_revision.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint"><constraints nullable="false"/></column>
+            <column name="name" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="description" type="varchar(500)"/>
+            <column name="budget_type" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="currency" type="varchar(10)"><constraints nullable="false"/></column>
+            <column name="creation_request_id" type="varchar(100)"><constraints nullable="false"/></column>
+            <column name="creation_request_hash" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="created_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="budget" columnNames="user_id,creation_request_id" constraintName="ux_budget_owner_request"/>
+        <createIndex tableName="budget" indexName="ix_budget_owner_updated"><column name="user_id"/><column name="updated_at"/></createIndex>
+        <addForeignKeyConstraint baseTableName="budget" baseColumnNames="user_id" constraintName="fk_budget__user_id" referencedTableName="jhi_user" referencedColumnNames="id"/>
+
+        <createTable tableName="budget_revision" remarks="Immutable recorded budget configuration snapshot.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="revision_number" type="int"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="target_amount" type="decimal(21,2)"><constraints nullable="false"/></column>
+            <column name="interval_count" type="int"><constraints nullable="false"/></column>
+            <column name="interval_unit" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="alignment" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="anchor_date" type="date"><constraints nullable="false"/></column>
+            <column name="recurrence_mode" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="termination" type="varchar(30)"><constraints nullable="false"/></column>
+            <column name="termination_period_count" type="int"/>
+            <column name="recurrence_end_date" type="date"/>
+            <column name="account_scope_mode" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="category_scope_mode" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="tag_scope_mode" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="tag_match_mode" type="varchar(10)"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="budget_revision" columnNames="budget_id,revision_number" constraintName="ux_budget_revision_number"/>
+        <addForeignKeyConstraint baseTableName="budget_revision" baseColumnNames="budget_id" constraintName="fk_budget_revision__budget_id" referencedTableName="budget" referencedColumnNames="id"/>
+
+        <createTable tableName="rel_budget_revision__accounts">
+            <column name="budget_revision_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="accounts_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="rel_budget_revision__accounts" columnNames="budget_revision_id,accounts_id"/>
+        <addForeignKeyConstraint baseTableName="rel_budget_revision__accounts" baseColumnNames="budget_revision_id" constraintName="fk_rel_budget_revision_accounts__revision" referencedTableName="budget_revision" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="rel_budget_revision__accounts" baseColumnNames="accounts_id" constraintName="fk_rel_budget_revision_accounts__account" referencedTableName="financial_account" referencedColumnNames="id"/>
+
+        <createTable tableName="rel_budget_revision__categories">
+            <column name="budget_revision_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="categories_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="rel_budget_revision__categories" columnNames="budget_revision_id,categories_id"/>
+        <addForeignKeyConstraint baseTableName="rel_budget_revision__categories" baseColumnNames="budget_revision_id" constraintName="fk_rel_budget_revision_categories__revision" referencedTableName="budget_revision" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="rel_budget_revision__categories" baseColumnNames="categories_id" constraintName="fk_rel_budget_revision_categories__category" referencedTableName="category" referencedColumnNames="id"/>
+
+        <createTable tableName="rel_budget_revision__tags">
+            <column name="budget_revision_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="tags_id" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey tableName="rel_budget_revision__tags" columnNames="budget_revision_id,tags_id"/>
+        <addForeignKeyConstraint baseTableName="rel_budget_revision__tags" baseColumnNames="budget_revision_id" constraintName="fk_rel_budget_revision_tags__revision" referencedTableName="budget_revision" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="rel_budget_revision__tags" baseColumnNames="tags_id" constraintName="fk_rel_budget_revision_tags__tag" referencedTableName="tag" referencedColumnNames="id"/>
+    </changeSet>
+</databaseChangeLog>

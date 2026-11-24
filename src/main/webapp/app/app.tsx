@@ -16,6 +16,7 @@ import { hasAnyAuthority } from 'app/shared/auth/private-route';
 import ErrorBoundary from 'app/shared/error/error-boundary';
 import { AUTHORITIES } from 'app/config/constants';
 import AppRoutes from 'app/routes';
+import { NotificationCenterProvider } from 'app/shared/notifications/notification-center';
 
 const baseHref = document.querySelector('base').getAttribute('href').replace(/\/$/, '');
 
@@ -39,24 +40,26 @@ export const App = () => {
     <BrowserRouter basename={baseHref}>
       <div className="app-container" style={{ paddingTop }}>
         <ToastContainer position="top-left" className="toastify-container" toastClassName="toastify-toast" />
-        <ErrorBoundary>
-          <Header
-            isAuthenticated={isAuthenticated}
-            isAdmin={isAdmin}
-            currentLocale={currentLocale}
-            ribbonEnv={ribbonEnv}
-            isInProduction={isInProduction}
-            isOpenAPIEnabled={isOpenAPIEnabled}
-          />
-        </ErrorBoundary>
-        <div className="container-fluid view-container" id="app-view-container">
-          <Card className="jh-card">
-            <ErrorBoundary>
-              <AppRoutes />
-            </ErrorBoundary>
-          </Card>
-          <Footer />
-        </div>
+        <NotificationCenterProvider isAuthenticated={isAuthenticated}>
+          <ErrorBoundary>
+            <Header
+              isAuthenticated={isAuthenticated}
+              isAdmin={isAdmin}
+              currentLocale={currentLocale}
+              ribbonEnv={ribbonEnv}
+              isInProduction={isInProduction}
+              isOpenAPIEnabled={isOpenAPIEnabled}
+            />
+          </ErrorBoundary>
+          <div className="container-fluid view-container" id="app-view-container">
+            <Card className="jh-card">
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
+            </Card>
+            <Footer />
+          </div>
+        </NotificationCenterProvider>
       </div>
     </BrowserRouter>
   );

@@ -42,8 +42,6 @@ public class TagDTO implements Serializable {
 
     private Set<FinancialSubscriptionDTO> subscriptions = new HashSet<>();
 
-    private Set<BudgetDTO> budgets = new HashSet<>();
-
     public Long getId() {
         return id;
     }
@@ -132,14 +130,6 @@ public class TagDTO implements Serializable {
         this.subscriptions = subscriptions;
     }
 
-    public Set<BudgetDTO> getBudgets() {
-        return budgets;
-    }
-
-    public void setBudgets(Set<BudgetDTO> budgets) {
-        this.budgets = budgets;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -176,7 +166,6 @@ public class TagDTO implements Serializable {
             ", financialTransactions=" + getFinancialTransactions() +
             ", transactionRules=" + getTransactionRules() +
             ", subscriptions=" + getSubscriptions() +
-            ", budgets=" + getBudgets() +
             "}";
     }
 }

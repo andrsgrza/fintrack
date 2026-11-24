@@ -5,9 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import java.io.Serializable;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * A DTO for the {@link com.fintrack.app.domain.Category} entity.
@@ -44,8 +42,6 @@ public class CategoryDTO implements Serializable {
     private UserDTO user;
 
     private CategoryDTO parentCategory;
-
-    private Set<BudgetDTO> budgets = new HashSet<>();
 
     public Long getId() {
         return id;
@@ -135,14 +131,6 @@ public class CategoryDTO implements Serializable {
         this.parentCategory = parentCategory;
     }
 
-    public Set<BudgetDTO> getBudgets() {
-        return budgets;
-    }
-
-    public void setBudgets(Set<BudgetDTO> budgets) {
-        this.budgets = budgets;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -179,7 +167,6 @@ public class CategoryDTO implements Serializable {
             ", updatedAt='" + getUpdatedAt() + "'" +
             ", user=" + getUser() +
             ", parentCategory=" + getParentCategory() +
-            ", budgets=" + getBudgets() +
             "}";
     }
 }

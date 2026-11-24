@@ -14,7 +14,6 @@ import TransactionRule from './transaction-rule';
 import TransactionRuleCondition from './transaction-rule-condition';
 import DescriptionNormalizationRule from './description-normalization-rule';
 import FinancialSubscription from './financial-subscription';
-import Budget from './budget';
 import InternalTransfer from './internal-transfer';
 import ApiIngestion from './api-ingestion';
 import ApiAccessToken from './api-access-token';
@@ -25,6 +24,11 @@ import PersonalDashboardGallery from './personal-dashboards/personal-dashboard-g
 import PersonalDashboardDefaultRedirect from './personal-dashboards/personal-dashboard-default-redirect';
 import PersonalDashboardViewer from './personal-dashboards/personal-dashboard-viewer';
 import RecommendedDashboards from './recommended-dashboards/recommended-dashboards';
+import BudgetOverview from './budget/budget-overview';
+import BudgetCreate from './budget/budget-create';
+import BudgetDetail from './budget/budget-detail';
+import BudgetEdit from './budget/budget-edit';
+import NotificationHistory from './notifications/notification-history';
 /* jhipster-needle-add-route-import - JHipster will add routes here */
 
 export default () => {
@@ -41,6 +45,11 @@ export default () => {
         <Route path="analytics/dashboards/default" element={<PersonalDashboardDefaultRedirect />} />
         <Route path="analytics/dashboards/personal/:dashboardId" element={<PersonalDashboardViewer />} />
         <Route path="analytics/dashboards/:dashboardId" element={<RecommendedDashboards />} />
+        <Route path="budgets/new" element={<BudgetCreate />} />
+        <Route path="budgets/:budgetId/edit" element={<BudgetEdit />} />
+        <Route path="budgets/:budgetId" element={<BudgetDetail />} />
+        <Route path="budgets" element={<BudgetOverview />} />
+        <Route path="notifications" element={<NotificationHistory />} />
         <Route path="category/*" element={<Category />} />
         <Route path="tag/*" element={<Tag />} />
         <Route path="rules/*" element={<Rules />} />
@@ -48,7 +57,6 @@ export default () => {
         <Route path="transaction-rule-condition/*" element={<TransactionRuleCondition />} />
         <Route path="description-normalization-rule/*" element={<DescriptionNormalizationRule />} />
         <Route path="financial-subscription/*" element={<FinancialSubscription />} />
-        <Route path="budget/*" element={<Budget />} />
         <Route path="internal-transfers/*" element={<InternalTransfer />} />
         <Route path="internal-transfer/*" element={<Navigate to="/internal-transfers" replace />} />
         <Route path="api-ingestion/*" element={<ApiIngestion />} />

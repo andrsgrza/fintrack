@@ -46,7 +46,6 @@ const tags = [
     financialTransactions: [{ id: 10 }],
     transactionRules: [{ id: 20 }],
     subscriptions: [{ id: 30 }],
-    budgets: [{ id: 40 }],
   },
   {
     id: 2,

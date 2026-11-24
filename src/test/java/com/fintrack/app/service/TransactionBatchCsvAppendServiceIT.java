@@ -25,6 +25,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -346,6 +347,7 @@ class TransactionBatchCsvAppendServiceIT {
 
     @Test
     @Transactional
+    @Timeout(30)
     void rejectsStructuralCsvWithoutMutatingAndHandlesRepresentativeFortyAndFiveHundredRowAppends() {
         TransactionBatchWorkspaceDTO batch = commandService.createOpenBatch(account().getId());
 

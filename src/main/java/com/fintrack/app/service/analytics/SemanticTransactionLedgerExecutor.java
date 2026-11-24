@@ -105,6 +105,7 @@ class SemanticTransactionLedgerExecutor {
             .stream()
             .map(source -> row(source, definition, monetary, scope.references(), accountsById))
             .toList();
+        rows = completeEmptyScalarCurrencyPartitions(scope, rows, monetary);
         rows = completeEmptyTemporalPeriods(scope, rows, monetary);
         List<SemanticAnalyticsWarning> warnings = definition.groupBy().contains(SemanticField.TAG_ID)
             ? List.of(
@@ -115,6 +116,41 @@ class SemanticTransactionLedgerExecutor {
             )
             : List.of();
         return SemanticAnalyticsResultFactory.result(scope, rows, columns, warnings);
+    }
+
+    /**
+     * A scalar money query is still partitioned by account currency. PostgreSQL cannot emit a grouped currency row
+     * when no ledger entry matches, so create an applicable semantic row for every compatible scoped currency. This
+     * is intentionally restricted to scalar ledger aggregates: it makes economic SUM and COUNT known zero while an
+     * AVG remains NO_DATA, without pretending that absent category/tag or historical-position observations are zero.
+     */
+    private List<SemanticAnalyticsResultRow> completeEmptyScalarCurrencyPartitions(
+        SemanticAnalyticsExecutionScope scope,
+        List<SemanticAnalyticsResultRow> source,
+        boolean monetary
+    ) {
+        if (!monetary || !scope.definition().groupBy().isEmpty() || scope.accounts().isEmpty()) return source;
+
+        Map<String, SemanticAnalyticsResultRow> rowsByCurrency = new LinkedHashMap<>();
+        source.forEach(row -> rowsByCurrency.put(row.currencyCode(), row));
+        scope
+            .accounts()
+            .stream()
+            .map(FinancialAccount::getCurrency)
+            .map(Enum::name)
+            .distinct()
+            .sorted()
+            .forEach(currency ->
+                rowsByCurrency.putIfAbsent(
+                    currency,
+                    new SemanticAnalyticsResultRow(
+                        List.of(),
+                        currency,
+                        scope.definition().projections().stream().map(SemanticAnalyticsResultFactory::emptyPeriodValue).toList()
+                    )
+                )
+            );
+        return List.copyOf(rowsByCurrency.values());
     }
 
     private Map<SemanticField, String> dimensionExpressions(List<SemanticField> groupings) {
@@ -271,6 +307,12 @@ class SemanticTransactionLedgerExecutor {
             }
             case DESCENDANT_OF -> {
                 parameters.addValue(parameter, references.descendantsInclusive(Long.valueOf(predicate.values().get(0))));
+                yield "ft.category_id in (:" + parameter + ")";
+            }
+            case DESCENDANT_OF_ANY -> {
+                java.util.Set<Long> categoryIds = new java.util.LinkedHashSet<>();
+                predicate.values().forEach(value -> categoryIds.addAll(references.descendantsInclusive(Long.valueOf(value))));
+                parameters.addValue(parameter, List.copyOf(categoryIds));
                 yield "ft.category_id in (:" + parameter + ")";
             }
             case IS_UNCATEGORIZED -> "ft.category_id is null";

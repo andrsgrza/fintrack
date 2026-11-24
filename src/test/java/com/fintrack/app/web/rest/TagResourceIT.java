@@ -12,7 +12,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.IntegrationTest;
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialSubscription;
 import com.fintrack.app.domain.FinancialTransaction;
@@ -27,7 +26,6 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateValidationStatus;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
-import com.fintrack.app.repository.BudgetRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.TagRepository;
@@ -110,9 +108,6 @@ class TagResourceIT {
 
     @Autowired
     private FinancialSubscriptionRepository financialSubscriptionRepository;
-
-    @Autowired
-    private BudgetRepository budgetRepository;
 
     @Autowired
     private TransactionCandidateRepository transactionCandidateRepository;
@@ -815,28 +810,6 @@ class TagResourceIT {
 
         // Get all the tagList where subscriptions equals to (subscriptionsId + 1)
         defaultTagShouldNotBeFound("subscriptionsId.equals=" + (subscriptionsId + 1));
-    }
-
-    @Test
-    @Transactional
-    void getAllTagsByBudgetsIsEqualToSomething() throws Exception {
-        Budget budgets;
-        if (TestUtil.findAll(em, Budget.class).isEmpty()) {
-            tagRepository.saveAndFlush(tag);
-            budgets = BudgetResourceIT.createEntity(em);
-        } else {
-            budgets = TestUtil.findAll(em, Budget.class).get(0);
-        }
-        em.persist(budgets);
-        em.flush();
-        tag.addBudgets(budgets);
-        tagRepository.saveAndFlush(tag);
-        Long budgetsId = budgets.getId();
-        // Get all the tagList where budgets equals to budgetsId
-        defaultTagShouldBeFound("budgetsId.equals=" + budgetsId);
-
-        // Get all the tagList where budgets equals to (budgetsId + 1)
-        defaultTagShouldNotBeFound("budgetsId.equals=" + (budgetsId + 1));
     }
 
     private void defaultTagFiltering(String shouldBeFound, String shouldNotBeFound) throws Exception {
@@ -1794,26 +1767,6 @@ class TagResourceIT {
 
     @Test
     @Transactional
-    void deleteTagUsedByBudgetUnlinksAndPreservesBudget() throws Exception {
-        Tag persistedTag = persistTag();
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addTags(managedTagReference(persistedTag));
-        budgetRepository.saveAndFlush(budget);
-        em.detach(budget);
-
-        restTagMockMvc
-            .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
-            .andExpect(status().isNoContent());
-
-        assertThat(tagRepository.existsById(persistedTag.getId())).isFalse();
-        em.clear();
-        Budget persistedBudget = budgetRepository.findById(budget.getId()).orElseThrow();
-        assertThat(persistedBudget.getTags()).isEmpty();
-        insertedTag = null;
-    }
-
-    @Test
-    @Transactional
     void deleteTagUsedInMultipleEntityTypesCleansAllRelationships() throws Exception {
         Tag persistedTag = persistTag();
 
@@ -1829,13 +1782,9 @@ class TagResourceIT {
         financialSubscription.addTags(managedTagReference(persistedTag));
         financialSubscriptionRepository.saveAndFlush(financialSubscription);
 
-        Budget budget = BudgetResourceIT.createEntity(em);
-        budget.addTags(managedTagReference(persistedTag));
-        budgetRepository.saveAndFlush(budget);
         em.detach(financialTransaction);
         em.detach(transactionRule);
         em.detach(financialSubscription);
-        em.detach(budget);
 
         restTagMockMvc
             .perform(delete(ENTITY_API_URL_ID, persistedTag.getId()).accept(MediaType.APPLICATION_JSON))
@@ -1847,7 +1796,6 @@ class TagResourceIT {
         assertThat(financialTransactionRepository.findById(financialTransaction.getId()).orElseThrow().getTags()).isEmpty();
         assertThat(transactionRuleRepository.findById(transactionRule.getId()).orElseThrow().getResultingTags()).isEmpty();
         assertThat(financialSubscriptionRepository.findById(financialSubscription.getId()).orElseThrow().getTags()).isEmpty();
-        assertThat(budgetRepository.findById(budget.getId()).orElseThrow().getTags()).isEmpty();
         insertedTag = null;
     }
 

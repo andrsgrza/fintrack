@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.CategoryType;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.CategoryDTO;
@@ -39,6 +40,9 @@ class CategoryServiceTest {
 
     @Mock
     private CategoryRepository categoryRepository;
+
+    @Mock
+    private BudgetRevisionRepository budgetRevisionRepository;
 
     @Mock
     private CategoryMapper categoryMapper;
@@ -383,7 +387,7 @@ class CategoryServiceTest {
 
         verify(categoryRepository).clearFinancialTransactionCategoryReferences(10L);
         verify(categoryRepository).clearFinancialSubscriptionCategoryReferences(10L);
-        verify(categoryRepository).deleteBudgetCategoryLinksByCategoryId(10L);
+        verify(budgetRevisionRepository).deleteCategoryLinksByCategoryId(10L);
         verify(categoryRepository).clearTransactionRuleResultingCategoryReferences(10L);
         verify(categoryRepository).deleteById(10L);
     }

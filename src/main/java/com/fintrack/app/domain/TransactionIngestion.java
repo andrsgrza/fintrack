@@ -78,7 +78,7 @@ public class TransactionIngestion implements Serializable {
     @ManyToOne(optional = false)
     @NotNull
     @JsonIgnoreProperties(
-        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "transactionIngestions", "budgets" },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "transactionIngestions" },
         allowSetters = true
     )
     private FinancialAccount account;

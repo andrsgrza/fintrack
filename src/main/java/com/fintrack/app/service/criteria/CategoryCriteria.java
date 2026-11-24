@@ -70,8 +70,6 @@ public class CategoryCriteria implements Serializable, Criteria {
 
     private LongFilter subscriptionsId;
 
-    private LongFilter budgetsId;
-
     private Boolean distinct;
 
     public CategoryCriteria() {}
@@ -92,7 +90,6 @@ public class CategoryCriteria implements Serializable, Criteria {
         this.childCategoriesId = other.optionalChildCategoriesId().map(LongFilter::copy).orElse(null);
         this.transactionRulesId = other.optionalTransactionRulesId().map(LongFilter::copy).orElse(null);
         this.subscriptionsId = other.optionalSubscriptionsId().map(LongFilter::copy).orElse(null);
-        this.budgetsId = other.optionalBudgetsId().map(LongFilter::copy).orElse(null);
         this.distinct = other.distinct;
     }
 
@@ -386,25 +383,6 @@ public class CategoryCriteria implements Serializable, Criteria {
         this.subscriptionsId = subscriptionsId;
     }
 
-    public LongFilter getBudgetsId() {
-        return budgetsId;
-    }
-
-    public Optional<LongFilter> optionalBudgetsId() {
-        return Optional.ofNullable(budgetsId);
-    }
-
-    public LongFilter budgetsId() {
-        if (budgetsId == null) {
-            setBudgetsId(new LongFilter());
-        }
-        return budgetsId;
-    }
-
-    public void setBudgetsId(LongFilter budgetsId) {
-        this.budgetsId = budgetsId;
-    }
-
     public Boolean getDistinct() {
         return distinct;
     }
@@ -449,7 +427,6 @@ public class CategoryCriteria implements Serializable, Criteria {
             Objects.equals(childCategoriesId, that.childCategoriesId) &&
             Objects.equals(transactionRulesId, that.transactionRulesId) &&
             Objects.equals(subscriptionsId, that.subscriptionsId) &&
-            Objects.equals(budgetsId, that.budgetsId) &&
             Objects.equals(distinct, that.distinct)
         );
     }
@@ -472,7 +449,6 @@ public class CategoryCriteria implements Serializable, Criteria {
             childCategoriesId,
             transactionRulesId,
             subscriptionsId,
-            budgetsId,
             distinct
         );
     }
@@ -496,7 +472,6 @@ public class CategoryCriteria implements Serializable, Criteria {
             optionalChildCategoriesId().map(f -> "childCategoriesId=" + f + ", ").orElse("") +
             optionalTransactionRulesId().map(f -> "transactionRulesId=" + f + ", ").orElse("") +
             optionalSubscriptionsId().map(f -> "subscriptionsId=" + f + ", ").orElse("") +
-            optionalBudgetsId().map(f -> "budgetsId=" + f + ", ").orElse("") +
             optionalDistinct().map(f -> "distinct=" + f + ", ").orElse("") +
         "}";
     }

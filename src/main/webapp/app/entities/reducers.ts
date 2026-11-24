@@ -8,7 +8,6 @@ import transactionRuleCondition from 'app/entities/transaction-rule-condition/tr
 import descriptionNormalizationRule from 'app/entities/description-normalization-rule/description-normalization-rule.reducer';
 import descriptionNormalizationRuleCondition from 'app/entities/description-normalization-rule-condition/description-normalization-rule-condition.reducer';
 import financialSubscription from 'app/entities/financial-subscription/financial-subscription.reducer';
-import budget from 'app/entities/budget/budget.reducer';
 import apiIngestion from 'app/entities/api-ingestion/api-ingestion.reducer';
 import apiAccessToken from 'app/entities/api-access-token/api-access-token.reducer';
 import apiAccessTokenPermission from 'app/entities/api-access-token-permission/api-access-token-permission.reducer';
@@ -25,7 +24,6 @@ const entitiesReducers = {
   descriptionNormalizationRule,
   descriptionNormalizationRuleCondition,
   financialSubscription,
-  budget,
   apiIngestion,
   apiAccessToken,
   apiAccessTokenPermission,

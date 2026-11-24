@@ -41,7 +41,8 @@ class SemanticAnalyticsReferenceResolver {
             category.getName(),
             category.getColor(),
             category.getActive(),
-            category.getParentCategory() == null ? null : category.getParentCategory().getId()
+            category.getParentCategory() == null ? null : category.getParentCategory().getId(),
+            category.getCategoryType()
         );
     }
 

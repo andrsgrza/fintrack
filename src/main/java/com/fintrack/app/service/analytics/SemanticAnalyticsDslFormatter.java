@@ -57,6 +57,7 @@ final class SemanticAnalyticsDslFormatter {
         output.append(predicate.field().name()).append(' ').append(predicate.operator().name());
         if (
             predicate.operator() == SemanticPredicateOperator.IN ||
+            predicate.operator() == SemanticPredicateOperator.DESCENDANT_OF_ANY ||
             predicate.operator() == SemanticPredicateOperator.HAS_ANY ||
             predicate.operator() == SemanticPredicateOperator.HAS_ALL
         ) {

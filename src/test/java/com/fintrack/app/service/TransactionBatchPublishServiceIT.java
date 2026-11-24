@@ -7,7 +7,14 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fintrack.app.IntegrationTest;
+import com.fintrack.app.domain.Budget;
+import com.fintrack.app.domain.BudgetNotificationOutbox;
+import com.fintrack.app.domain.BudgetNotificationPreference;
+import com.fintrack.app.domain.BudgetRevision;
+import com.fintrack.app.domain.BudgetRevisionConfiguration;
+import com.fintrack.app.domain.BudgetRevisionSchedule;
 import com.fintrack.app.domain.Category;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
@@ -16,12 +23,29 @@ import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.TransactionBatch;
 import com.fintrack.app.domain.User;
 import com.fintrack.app.domain.enumeration.AccountType;
+import com.fintrack.app.domain.enumeration.BudgetAccountScopeMode;
+import com.fintrack.app.domain.enumeration.BudgetAlignment;
+import com.fintrack.app.domain.enumeration.BudgetCategoryScopeMode;
+import com.fintrack.app.domain.enumeration.BudgetIntervalUnit;
+import com.fintrack.app.domain.enumeration.BudgetRecurrenceMode;
+import com.fintrack.app.domain.enumeration.BudgetRecurrenceTermination;
+import com.fintrack.app.domain.enumeration.BudgetTagMatchMode;
+import com.fintrack.app.domain.enumeration.BudgetTagScopeMode;
+import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CategoryType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
 import com.fintrack.app.domain.enumeration.TransactionBatchStatus;
 import com.fintrack.app.domain.enumeration.TransactionCandidateInternalTransferMode;
 import com.fintrack.app.domain.enumeration.TransactionFlow;
 import com.fintrack.app.domain.enumeration.TransactionOrigin;
+import com.fintrack.app.repository.BudgetNotificationOutboxRepository;
+import com.fintrack.app.repository.BudgetNotificationPreferenceRepository;
+import com.fintrack.app.repository.BudgetNotificationRepository;
+import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionRepository;
+import com.fintrack.app.repository.BudgetRevisionScheduleRepository;
+import com.fintrack.app.repository.BudgetThresholdClaimRepository;
+import com.fintrack.app.repository.BudgetTimeZoneAssignmentRepository;
 import com.fintrack.app.repository.CategoryRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialTransactionRepository;
@@ -29,6 +53,12 @@ import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionBatchRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
+import com.fintrack.app.service.budget.BudgetEvaluationResult;
+import com.fintrack.app.service.budget.BudgetEvaluationService;
+import com.fintrack.app.service.budget.BudgetNotificationOutboxWorker;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationSnapshot;
+import com.fintrack.app.service.budget.BudgetTimeZoneService;
+import com.fintrack.app.service.dto.FinancialTransactionDTO;
 import com.fintrack.app.service.dto.InternalTransferCounterpartCommand;
 import com.fintrack.app.service.dto.TransactionBatchDraftCommand;
 import com.fintrack.app.service.dto.TransactionBatchInternalTransferCommand;
@@ -44,6 +74,7 @@ import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -60,6 +91,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @WithMockUser(username = "user")
 class TransactionBatchPublishServiceIT {
 
+    private static final Instant NOTIFICATION_NOW = Instant.now();
+    private static final LocalDate NOTIFICATION_DATE = LocalDate.now(ZoneId.of("America/Mexico_City"));
+
     @Autowired
     private EntityManager em;
 
@@ -68,6 +102,9 @@ class TransactionBatchPublishServiceIT {
 
     @Autowired
     private TransactionBatchPublishService publishService;
+
+    @Autowired
+    private FinancialTransactionService financialTransactionService;
 
     @Autowired
     private TransactionBatchReceiptCleanupService cleanupService;
@@ -100,11 +137,51 @@ class TransactionBatchPublishServiceIT {
     private TagRepository tagRepository;
 
     @Autowired
+    private BudgetRepository budgetRepository;
+
+    @Autowired
+    private BudgetRevisionScheduleRepository budgetRevisionScheduleRepository;
+
+    @Autowired
+    private BudgetRevisionRepository budgetRevisionRepository;
+
+    @Autowired
+    private BudgetTimeZoneAssignmentRepository budgetTimeZoneAssignmentRepository;
+
+    @Autowired
+    private BudgetNotificationPreferenceRepository budgetNotificationPreferenceRepository;
+
+    @Autowired
+    private BudgetThresholdClaimRepository budgetThresholdClaimRepository;
+
+    @Autowired
+    private BudgetNotificationOutboxRepository budgetNotificationOutboxRepository;
+
+    @Autowired
+    private BudgetNotificationRepository budgetNotificationRepository;
+
+    @Autowired
+    private BudgetTimeZoneService budgetTimeZoneService;
+
+    @Autowired
+    private BudgetEvaluationService budgetEvaluationService;
+
+    @Autowired
+    private BudgetNotificationOutboxWorker budgetNotificationOutboxWorker;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
     private TransactionTemplate transactionTemplate;
 
     private final Set<Long> committedFailureFixtureAccountIds = new LinkedHashSet<>();
 
+    private final Set<Long> committedFailureFixtureCategoryIds = new LinkedHashSet<>();
+
     private final Set<Long> committedFailureFixtureBatchIds = new LinkedHashSet<>();
+
+    private final Set<Long> committedFailureFixtureBudgetIds = new LinkedHashSet<>();
 
     /**
      * The two rollback-injection tests run outside a test-managed transaction so the publication service can verify
@@ -114,6 +191,21 @@ class TransactionBatchPublishServiceIT {
     @AfterEach
     void removeCommittedRollbackFixtures() {
         transactionTemplate.executeWithoutResult(status -> {
+            for (Long budgetId : committedFailureFixtureBudgetIds) {
+                budgetNotificationRepository.deleteByBudgetId(budgetId);
+                budgetNotificationOutboxRepository.deleteByBudgetId(budgetId);
+                budgetThresholdClaimRepository.deleteByBudgetId(budgetId);
+                budgetNotificationPreferenceRepository.deleteByBudgetId(budgetId);
+                budgetTimeZoneAssignmentRepository.deleteByBudgetId(budgetId);
+                budgetRevisionScheduleRepository.deleteByBudgetId(budgetId);
+                budgetRevisionRepository.deleteAccountLinksByBudgetId(budgetId);
+                budgetRevisionRepository.deleteCategoryLinksByBudgetId(budgetId);
+                budgetRevisionRepository.deleteTagLinksByBudgetId(budgetId);
+                budgetRevisionRepository.deleteByBudgetId(budgetId);
+                budgetRepository
+                    .findById(budgetId)
+                    .ifPresent(budget -> budgetRepository.deleteAggregateById(budgetId, budget.getVersion()));
+            }
             for (Long batchId : committedFailureFixtureBatchIds) {
                 candidateRepository.deleteTagLinksByTransactionBatchId(batchId);
                 candidateRepository.deleteByTransactionBatchId(batchId);
@@ -125,6 +217,7 @@ class TransactionBatchPublishServiceIT {
                 financialTransactionRepository.deleteByAccountId(accountId);
             }
             committedFailureFixtureAccountIds.forEach(accountRepository::deleteById);
+            committedFailureFixtureCategoryIds.forEach(categoryRepository::deleteById);
         });
 
         transactionTemplate.executeWithoutResult(status -> {
@@ -132,10 +225,15 @@ class TransactionBatchPublishServiceIT {
             assertThat(committedFailureFixtureAccountIds).allSatisfy(accountId ->
                 assertThat(accountRepository.existsById(accountId)).isFalse()
             );
+            assertThat(committedFailureFixtureCategoryIds).allSatisfy(categoryId ->
+                assertThat(categoryRepository.existsById(categoryId)).isFalse()
+            );
         });
 
         committedFailureFixtureBatchIds.clear();
+        committedFailureFixtureBudgetIds.clear();
         committedFailureFixtureAccountIds.clear();
+        committedFailureFixtureCategoryIds.clear();
     }
 
     @Test
@@ -214,6 +312,97 @@ class TransactionBatchPublishServiceIT {
             .hasMessage("BATCH_ALREADY_PUBLISHED");
     }
 
+    /**
+     * BUDGET-6A's durable-publication proof. The Batch publisher intentionally captures every candidate in logical
+     * row order rather than comparing only the net Batch total: 40% -> 70% -> 110% claims 50%, then 80% and 100%.
+     * The financial model has no negative economic-expense row, so a valid subsequent amount correction produces
+     * the required 90% final state without inventing a synthetic transaction type.
+     */
+    @Test
+    @Transactional
+    void preserves_intermediate_budget_threshold_crossings_for_an_atomic_batch_and_a_later_valid_correction() throws Exception {
+        User owner = user();
+        owner.setTimeZone("America/Mexico_City");
+        FinancialAccount account = account();
+        Category category = category(true);
+        FinancialTransaction opening = publishedTransaction(account, TransactionFlow.OUT, "4000.00", "Threshold opening expense");
+        opening.setTransactionDate(NOTIFICATION_DATE);
+        opening.setCategory(category);
+        financialTransactionRepository.saveAndFlush(opening);
+
+        Budget budget = notificationBudget(owner, category, "batch-threshold-notification");
+        budgetTimeZoneService.recordInitial(budget, "America/Mexico_City", NOTIFICATION_DATE.withDayOfMonth(1), NOTIFICATION_NOW);
+        BudgetNotificationPreference preference = BudgetNotificationPreference.create(budget, true, false, NOTIFICATION_NOW);
+        preference.replace(
+            true,
+            false,
+            Set.of(new BigDecimal("50.0000"), new BigDecimal("80.0000"), new BigDecimal("100.0000")),
+            NOTIFICATION_NOW
+        );
+        budgetNotificationPreferenceRepository.saveAndFlush(preference);
+
+        TransactionBatchWorkspaceDTO workspace = commandService.createOpenBatch(account.getId());
+        TransactionBatchRowMutationDTO first = commandService.addManualDraft(
+            workspace.getId(),
+            completeExpenseDraft(workspace.getVersion(), "Threshold batch 1", "-3000.00", category.getId())
+        );
+        TransactionBatchRowMutationDTO second = commandService.addManualDraft(
+            workspace.getId(),
+            completeExpenseDraft(first.getBatchVersion(), "Threshold batch 2", "-4000.00", category.getId())
+        );
+
+        TransactionBatchPublicationReceiptDTO receipt = publishService.publish(
+            workspace.getId(),
+            publishCommand(second.getBatchVersion(), "budget-threshold-intermediate-crossings")
+        );
+        assertThat(receipt.getStatus()).isEqualTo(TransactionBatchStatus.PUBLISHED);
+        assertThat(budgetThresholdClaimRepository.findAll()).hasSize(3);
+
+        List<BudgetNotificationOutbox> events = budgetNotificationOutboxRepository
+            .findAll()
+            .stream()
+            .filter(event -> event.getBudget().getId().equals(budget.getId()))
+            .sorted(java.util.Comparator.comparing(BudgetNotificationOutbox::getId))
+            .toList();
+        assertThat(events).hasSize(2);
+        List<BudgetThresholdNotificationSnapshot> snapshots = events.stream().map(event -> readSnapshot(event.getSnapshotJson())).toList();
+        assertThat(snapshots.get(0).newlyCrossedPercentages()).containsExactly(new BigDecimal("50.0000"));
+        assertThat(snapshots.get(0).newAmount()).isEqualByComparingTo("7000.00");
+        assertThat(snapshots.get(0).newProgressPercentage()).isEqualByComparingTo("70.0000");
+        assertThat(snapshots.get(1).newlyCrossedPercentages()).containsExactly(new BigDecimal("80.0000"), new BigDecimal("100.0000"));
+        assertThat(snapshots.get(1).newAmount()).isEqualByComparingTo("11000.00");
+        assertThat(snapshots.get(1).newProgressPercentage()).isEqualByComparingTo("110.0000");
+
+        TransactionBatchPublicationReceiptDTO replay = publishService.publish(
+            workspace.getId(),
+            publishCommand(0L, "budget-threshold-intermediate-crossings")
+        );
+        assertThat(replay.isReplayed()).isTrue();
+        assertThat(budgetThresholdClaimRepository.countByBudgetId(budget.getId())).isEqualTo(3);
+        assertThat(
+            budgetNotificationOutboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(budget.getId()))
+        ).hasSize(2);
+
+        FinancialTransaction corrected = findTransaction("Threshold batch 2");
+        FinancialTransactionDTO amountCorrection = new FinancialTransactionDTO();
+        amountCorrection.setId(corrected.getId());
+        amountCorrection.setAmount(new BigDecimal("2000.00"));
+        financialTransactionService
+            .partialUpdate(amountCorrection, objectMapper.createObjectNode().put("amount", new BigDecimal("2000.00")))
+            .orElseThrow();
+
+        BudgetEvaluationResult finalEvaluation = budgetEvaluationService.current(budget.getId(), "America/Mexico_City");
+        assertThat(finalEvaluation.actualAmount()).isEqualByComparingTo("9000.00");
+        assertThat(finalEvaluation.progressPercentage()).isEqualByComparingTo("90.0000");
+        assertThat(budgetThresholdClaimRepository.findAll()).hasSize(3);
+        assertThat(budgetNotificationOutboxRepository.findAll()).hasSize(2);
+
+        assertThat(budgetNotificationOutboxWorker.processPending()).isEqualTo(2);
+        assertThat(budgetNotificationRepository.findAll()).hasSize(2);
+        assertThat(budgetNotificationOutboxWorker.processPending()).isZero();
+        assertThat(budgetNotificationRepository.findAll()).hasSize(2);
+    }
+
     @Test
     @Transactional
     void rejectsTheWholeBatchWhenOneDraftIsIncompleteAndLeavesTheWorkspaceOpen() {
@@ -232,6 +421,65 @@ class TransactionBatchPublishServiceIT {
         assertThat(financialTransactionRepository.findAllWithToOneRelationshipsByAccountUserLogin("user"))
             .filteredOn(transaction -> "Valid".equals(transaction.getDescription()))
             .isEmpty();
+    }
+
+    /** The outer Batch transaction owns notification evidence too: a late publisher failure must leave no trace. */
+    @Test
+    void rollsBack_every_budget_notification_side_effect_when_atomic_publication_fails() {
+        FinancialAccount source = committedFailureFixtureAccount();
+        FinancialAccount target = committedFailureFixtureAccount();
+        Category category = committedFailureFixtureCategory();
+        FinancialTransaction opening = publishedTransaction(source, TransactionFlow.OUT, "40.00", "Rollback notification opening");
+        opening.setTransactionDate(NOTIFICATION_DATE);
+        opening.setCategory(category);
+        financialTransactionRepository.saveAndFlush(opening);
+        Budget budget = notificationBudget(user(), category, "batch-notification-rollback");
+        committedFailureFixtureBudgetIds.add(budget.getId());
+        budgetTimeZoneService.recordInitial(budget, "America/Mexico_City", NOTIFICATION_DATE.withDayOfMonth(1), NOTIFICATION_NOW);
+        BudgetNotificationPreference preference = BudgetNotificationPreference.create(budget, true, false, NOTIFICATION_NOW);
+        preference.replace(true, false, Set.of(new BigDecimal("50.0000")), NOTIFICATION_NOW);
+        budgetNotificationPreferenceRepository.saveAndFlush(preference);
+
+        TransactionBatchWorkspaceDTO batch = createCommittedFailureFixtureBatch(source.getId());
+        TransactionBatchRowMutationDTO ordinary = commandService.addManualDraft(
+            batch.getId(),
+            completeExpenseDraft(batch.getVersion(), "Rollback notification ordinary", "-20.00", category.getId())
+        );
+        TransactionBatchRowMutationDTO transfer = commandService.addManualDraft(
+            batch.getId(),
+            completeExpenseDraft(ordinary.getBatchVersion(), "Rollback notification transfer", "-80.00", category.getId())
+        );
+        TransactionBatchRowMutationDTO configured = commandService.setInternalTransfer(
+            batch.getId(),
+            transfer.getCandidate().getId(),
+            createCounterpartCommand(
+                transfer.getCandidate().getVersion(),
+                target.getId(),
+                NOTIFICATION_DATE,
+                "Rollback notification counterpart",
+                "rollback-notification-ref",
+                null
+            )
+        );
+
+        try {
+            doThrow(new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST))
+                .when(internalTransferCommandService)
+                .createCounterpartForTransactionWithinFinancialMutation(anyLong(), any(InternalTransferCounterpartCommand.class));
+
+            assertThatThrownBy(() ->
+                publishService.publish(batch.getId(), publishCommand(configured.getBatchVersion(), "rollback-notification"))
+            )
+                .isInstanceOf(InternalTransferCommandException.class)
+                .hasMessageContaining("TRANSFER_INVALID_REQUEST");
+        } finally {
+            reset(internalTransferCommandService);
+        }
+
+        assertThat(budgetThresholdClaimRepository.countByBudgetId(budget.getId())).isZero();
+        assertThat(
+            budgetNotificationOutboxRepository.findAll().stream().filter(event -> event.getBudget().getId().equals(budget.getId()))
+        ).isEmpty();
     }
 
     @Test
@@ -675,7 +923,7 @@ class TransactionBatchPublishServiceIT {
         try {
             doThrow(new InternalTransferCommandException(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST))
                 .when(internalTransferCommandService)
-                .createCounterpartForTransaction(anyLong(), any(InternalTransferCounterpartCommand.class));
+                .createCounterpartForTransactionWithinFinancialMutation(anyLong(), any(InternalTransferCounterpartCommand.class));
 
             assertThatThrownBy(() -> publishService.publish(batch.getId(), publishCommand(configured.getBatchVersion(), "rollback-create")))
                 .isInstanceOf(InternalTransferCommandException.class)
@@ -802,6 +1050,70 @@ class TransactionBatchPublishServiceIT {
         return command;
     }
 
+    private TransactionBatchDraftCommand completeExpenseDraft(
+        Long expectedBatchVersion,
+        String description,
+        String signedAmount,
+        Long categoryId
+    ) {
+        TransactionBatchDraftCommand command = new TransactionBatchDraftCommand();
+        command.setExpectedBatchVersion(expectedBatchVersion);
+        command.setTransactionDate(NOTIFICATION_DATE);
+        command.setDescription(description);
+        command.setSignedAmount(new BigDecimal(signedAmount));
+        command.setCategoryId(categoryId);
+        return command;
+    }
+
+    private Budget notificationBudget(User owner, Category category, String creationRequestId) {
+        BudgetRevisionConfiguration configuration = new BudgetRevisionConfiguration(
+            new BigDecimal("10000.00"),
+            1,
+            BudgetIntervalUnit.MONTH,
+            BudgetAlignment.NATURAL,
+            NOTIFICATION_DATE.withDayOfMonth(1),
+            BudgetRecurrenceMode.RECURRING,
+            BudgetRecurrenceTermination.NONE,
+            null,
+            null,
+            BudgetAccountScopeMode.ALL,
+            BudgetCategoryScopeMode.SELECTED,
+            BudgetTagScopeMode.NONE,
+            BudgetTagMatchMode.ANY
+        );
+        Budget budget = Budget.create(
+            owner,
+            "Batch threshold budget",
+            null,
+            BudgetType.EXPENSE,
+            CurrencyCode.MXN,
+            creationRequestId,
+            creationRequestId,
+            NOTIFICATION_NOW
+        );
+        budget.addInitialRevision(BudgetRevision.initial(configuration, Set.of(), Set.of(category), Set.of(), NOTIFICATION_NOW));
+        Budget saved = budgetRepository.saveAndFlush(budget);
+        budgetRevisionScheduleRepository.saveAndFlush(
+            BudgetRevisionSchedule.scheduled(
+                saved,
+                saved.getRevisions().get(0),
+                NOTIFICATION_DATE.withDayOfMonth(1),
+                1,
+                "INITIAL",
+                NOTIFICATION_NOW
+            )
+        );
+        return saved;
+    }
+
+    private BudgetThresholdNotificationSnapshot readSnapshot(String json) {
+        try {
+            return objectMapper.readValue(json, BudgetThresholdNotificationSnapshot.class);
+        } catch (java.io.IOException exception) {
+            throw new AssertionError("Notification snapshot was not valid JSON", exception);
+        }
+    }
+
     private FinancialTransaction publishedTransaction(
         FinancialAccount account,
         com.fintrack.app.domain.enumeration.TransactionFlow flow,
@@ -839,6 +1151,12 @@ class TransactionBatchPublishServiceIT {
         FinancialAccount account = account();
         committedFailureFixtureAccountIds.add(account.getId());
         return account;
+    }
+
+    private Category committedFailureFixtureCategory() {
+        Category category = category(true);
+        committedFailureFixtureCategoryIds.add(category.getId());
+        return category;
     }
 
     private TransactionBatchWorkspaceDTO createCommittedFailureFixtureBatch(Long accountId) {

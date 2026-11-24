@@ -68,7 +68,6 @@ public class TagAsserts {
                 assertThat(a.getFinancialTransactions()).as("check financialTransactions").isEqualTo(expected.getFinancialTransactions())
             )
             .satisfies(a -> assertThat(a.getTransactionRules()).as("check transactionRules").isEqualTo(expected.getTransactionRules()))
-            .satisfies(a -> assertThat(a.getSubscriptions()).as("check subscriptions").isEqualTo(expected.getSubscriptions()))
-            .satisfies(a -> assertThat(a.getBudgets()).as("check budgets").isEqualTo(expected.getBudgets()));
+            .satisfies(a -> assertThat(a.getSubscriptions()).as("check subscriptions").isEqualTo(expected.getSubscriptions()));
     }
 }

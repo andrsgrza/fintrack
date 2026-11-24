@@ -86,7 +86,6 @@ class TagCriteriaTest {
         tagCriteria.financialTransactionsId();
         tagCriteria.transactionRulesId();
         tagCriteria.subscriptionsId();
-        tagCriteria.budgetsId();
         tagCriteria.distinct();
     }
 
@@ -104,7 +103,6 @@ class TagCriteriaTest {
                 condition.apply(criteria.getFinancialTransactionsId()) &&
                 condition.apply(criteria.getTransactionRulesId()) &&
                 condition.apply(criteria.getSubscriptionsId()) &&
-                condition.apply(criteria.getBudgetsId()) &&
                 condition.apply(criteria.getDistinct()),
             "every filter matches"
         );
@@ -124,7 +122,6 @@ class TagCriteriaTest {
                 condition.apply(criteria.getFinancialTransactionsId(), copy.getFinancialTransactionsId()) &&
                 condition.apply(criteria.getTransactionRulesId(), copy.getTransactionRulesId()) &&
                 condition.apply(criteria.getSubscriptionsId(), copy.getSubscriptionsId()) &&
-                condition.apply(criteria.getBudgetsId(), copy.getBudgetsId()) &&
                 condition.apply(criteria.getDistinct(), copy.getDistinct()),
             "every filter matches"
         );

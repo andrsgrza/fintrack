@@ -1,6 +1,5 @@
 package com.fintrack.app.domain;
 
-import static com.fintrack.app.domain.BudgetTestSamples.*;
 import static com.fintrack.app.domain.CategoryTestSamples.*;
 import static com.fintrack.app.domain.CategoryTestSamples.*;
 import static com.fintrack.app.domain.FinancialSubscriptionTestSamples.*;
@@ -127,27 +126,5 @@ class CategoryTest {
         category.setSubscriptions(new HashSet<>());
         assertThat(category.getSubscriptions()).doesNotContain(financialSubscriptionBack);
         assertThat(financialSubscriptionBack.getCategory()).isNull();
-    }
-
-    @Test
-    void budgetsTest() {
-        Category category = getCategoryRandomSampleGenerator();
-        Budget budgetBack = getBudgetRandomSampleGenerator();
-
-        category.addBudgets(budgetBack);
-        assertThat(category.getBudgets()).containsOnly(budgetBack);
-        assertThat(budgetBack.getCategories()).containsOnly(category);
-
-        category.removeBudgets(budgetBack);
-        assertThat(category.getBudgets()).doesNotContain(budgetBack);
-        assertThat(budgetBack.getCategories()).doesNotContain(category);
-
-        category.budgets(new HashSet<>(Set.of(budgetBack)));
-        assertThat(category.getBudgets()).containsOnly(budgetBack);
-        assertThat(budgetBack.getCategories()).containsOnly(category);
-
-        category.setBudgets(new HashSet<>());
-        assertThat(category.getBudgets()).doesNotContain(budgetBack);
-        assertThat(budgetBack.getCategories()).doesNotContain(category);
     }
 }

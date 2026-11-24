@@ -77,14 +77,14 @@ public class FinancialTransaction implements Serializable {
     @ManyToOne(optional = false)
     @NotNull
     @JsonIgnoreProperties(
-        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions" },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "transactionIngestions" },
         allowSetters = true
     )
     private FinancialAccount account;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(
-        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions", "budgets" },
+        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions" },
         allowSetters = true
     )
     private Category category;
@@ -106,7 +106,7 @@ public class FinancialTransaction implements Serializable {
         joinColumns = @JoinColumn(name = "financial_transaction_id"),
         inverseJoinColumns = @JoinColumn(name = "tags_id")
     )
-    @JsonIgnoreProperties(value = { "user", "financialTransactions", "transactionRules", "subscriptions", "budgets" }, allowSetters = true)
+    @JsonIgnoreProperties(value = { "user", "financialTransactions", "transactionRules", "subscriptions" }, allowSetters = true)
     private Set<Tag> tags = new HashSet<>();
 
     @JsonIgnoreProperties(value = { "outgoingTransaction", "incomingTransaction" }, allowSetters = true)

@@ -1,398 +1,198 @@
 package com.fintrack.app.domain;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fintrack.app.domain.enumeration.BudgetPeriod;
-import com.fintrack.app.domain.enumeration.BudgetStatus;
+import com.fintrack.app.domain.enumeration.BudgetType;
 import com.fintrack.app.domain.enumeration.CurrencyCode;
-import com.fintrack.app.domain.enumeration.TagMatchMode;
-import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * A spending limit for a recurring or custom period.
- *
- * Empty account/category/tag relations have domain-specific meanings:
- * - no accounts: all active accounts of the user in the budget currency
- * - no categories: any category
- * - no tags: no tag filtering
+ * Owner-scoped budget identity. Financial scope and calendar settings deliberately live in immutable
+ * {@link BudgetRevision} snapshots rather than on this aggregate root.
  */
 @Entity
-@Table(name = "budget")
-@SuppressWarnings("common-java:DuplicatedBlocks")
+@Table(
+    name = "budget",
+    uniqueConstraints = @UniqueConstraint(name = "ux_budget_owner_request", columnNames = { "user_id", "creation_request_id" }),
+    indexes = @Index(name = "ix_budget_owner_updated", columnList = "user_id,updated_at")
+)
 public class Budget implements Serializable {
-
-    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sequenceGenerator")
     @SequenceGenerator(name = "sequenceGenerator")
-    @Column(name = "id")
     private Long id;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @NotNull
     @Size(min = 1, max = 100)
     @Column(name = "name", length = 100, nullable = false)
     private String name;
 
-    @NotNull
-    @DecimalMin(value = "0")
-    @Column(name = "amount", precision = 21, scale = 2, nullable = false)
-    private BigDecimal amount;
+    @Size(max = 500)
+    @Column(name = "description", length = 500)
+    private String description;
 
     @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "currency", nullable = false)
+    @Column(name = "budget_type", length = 20, nullable = false, updatable = false)
+    private BudgetType type;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "currency", length = 10, nullable = false, updatable = false)
     private CurrencyCode currency;
 
+    /** Bounded opaque key used only to replay a creation command safely. */
     @NotNull
-    @Enumerated(EnumType.STRING)
-    @Column(name = "period", nullable = false)
-    private BudgetPeriod period;
-
-    @NotNull
-    @Column(name = "start_date", nullable = false)
-    private LocalDate startDate;
-
-    @Column(name = "end_date")
-    private LocalDate endDate;
+    @Size(min = 1, max = 100)
+    @Column(name = "creation_request_id", length = 100, nullable = false, updatable = false)
+    private String creationRequestId;
 
     @NotNull
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    private BudgetStatus status;
+    @Size(min = 1, max = 64)
+    @Column(name = "creation_request_hash", length = 64, nullable = false, updatable = false)
+    private String creationRequestHash;
 
     @NotNull
-    @Enumerated(EnumType.STRING)
-    @Column(name = "tag_match_mode", nullable = false)
-    private TagMatchMode tagMatchMode;
-
-    @DecimalMin(value = "0")
-    @DecimalMax(value = "100")
-    @Column(name = "warning_percentage", precision = 21, scale = 2)
-    private BigDecimal warningPercentage;
-
-    @NotNull
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @NotNull
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @ManyToOne(optional = false)
     @NotNull
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     private User user;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "rel_budget__accounts",
-        joinColumns = @JoinColumn(name = "budget_id"),
-        inverseJoinColumns = @JoinColumn(name = "accounts_id")
-    )
-    @JsonIgnoreProperties(
-        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "budgets", "transactionIngestions" },
-        allowSetters = true
-    )
-    private Set<FinancialAccount> accounts = new HashSet<>();
+    @OneToMany(mappedBy = "budget", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("revisionNumber ASC")
+    private List<BudgetRevision> revisions = new ArrayList<>();
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "rel_budget__categories",
-        joinColumns = @JoinColumn(name = "budget_id"),
-        inverseJoinColumns = @JoinColumn(name = "categories_id")
-    )
-    @JsonIgnoreProperties(
-        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions", "budgets" },
-        allowSetters = true
-    )
-    private Set<Category> categories = new HashSet<>();
+    protected Budget() {}
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(name = "rel_budget__tags", joinColumns = @JoinColumn(name = "budget_id"), inverseJoinColumns = @JoinColumn(name = "tags_id"))
-    @JsonIgnoreProperties(value = { "user", "financialTransactions", "transactionRules", "subscriptions", "budgets" }, allowSetters = true)
-    private Set<Tag> tags = new HashSet<>();
+    public static Budget create(
+        User owner,
+        String name,
+        String description,
+        BudgetType type,
+        CurrencyCode currency,
+        String creationRequestId,
+        String creationRequestHash,
+        Instant now
+    ) {
+        Budget budget = new Budget();
+        budget.user = owner;
+        budget.name = name;
+        budget.description = description;
+        budget.type = type;
+        budget.currency = currency;
+        budget.creationRequestId = creationRequestId;
+        budget.creationRequestHash = creationRequestHash;
+        budget.createdAt = now;
+        budget.updatedAt = now;
+        return budget;
+    }
 
-    // jhipster-needle-entity-add-field - JHipster will add fields here
+    public void addInitialRevision(BudgetRevision revision) {
+        addRevision(revision);
+    }
+
+    /** Revision snapshots are append-only. Effective dates are held by BudgetRevisionSchedule, not this aggregate. */
+    public void addRevision(BudgetRevision revision) {
+        if (
+            revision == null || revisions.stream().anyMatch(existing -> existing.getRevisionNumber().equals(revision.getRevisionNumber()))
+        ) {
+            throw new IllegalStateException("A Budget revision number may be recorded only once.");
+        }
+        revisions.add(revision);
+        revision.attachTo(this);
+    }
+
+    public void updateMetadata(String name, String description, Instant now) {
+        this.name = name;
+        this.description = description;
+        touch(now);
+    }
+
+    /** Makes the aggregate the optimistic-lock authority for all separately persisted history rows. */
+    public void touch(Instant now) {
+        if (now == null) throw new IllegalArgumentException("Budget update time is required.");
+        // A command may be processed by a fixed test clock or within the same database timestamp resolution.
+        // Keep a monotonic aggregate field so Hibernate always emits the versioned root update that protects
+        // separately persisted history rows.
+        this.updatedAt = !now.isAfter(updatedAt) ? updatedAt.plusNanos(1) : now;
+    }
 
     public Long getId() {
-        return this.id;
+        return id;
     }
 
-    public Budget id(Long id) {
-        this.setId(id);
-        return this;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
+    public Long getVersion() {
+        return version;
     }
 
     public String getName() {
-        return this.name;
+        return name;
     }
 
-    public Budget name(String name) {
-        this.setName(name);
-        return this;
+    public String getDescription() {
+        return description;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public BigDecimal getAmount() {
-        return this.amount;
-    }
-
-    public Budget amount(BigDecimal amount) {
-        this.setAmount(amount);
-        return this;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
+    public BudgetType getType() {
+        return type;
     }
 
     public CurrencyCode getCurrency() {
-        return this.currency;
+        return currency;
     }
 
-    public Budget currency(CurrencyCode currency) {
-        this.setCurrency(currency);
-        return this;
+    public String getCreationRequestId() {
+        return creationRequestId;
     }
 
-    public void setCurrency(CurrencyCode currency) {
-        this.currency = currency;
-    }
-
-    public BudgetPeriod getPeriod() {
-        return this.period;
-    }
-
-    public Budget period(BudgetPeriod period) {
-        this.setPeriod(period);
-        return this;
-    }
-
-    public void setPeriod(BudgetPeriod period) {
-        this.period = period;
-    }
-
-    public LocalDate getStartDate() {
-        return this.startDate;
-    }
-
-    public Budget startDate(LocalDate startDate) {
-        this.setStartDate(startDate);
-        return this;
-    }
-
-    public void setStartDate(LocalDate startDate) {
-        this.startDate = startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return this.endDate;
-    }
-
-    public Budget endDate(LocalDate endDate) {
-        this.setEndDate(endDate);
-        return this;
-    }
-
-    public void setEndDate(LocalDate endDate) {
-        this.endDate = endDate;
-    }
-
-    public BudgetStatus getStatus() {
-        return this.status;
-    }
-
-    public Budget status(BudgetStatus status) {
-        this.setStatus(status);
-        return this;
-    }
-
-    public void setStatus(BudgetStatus status) {
-        this.status = status;
-    }
-
-    public TagMatchMode getTagMatchMode() {
-        return this.tagMatchMode;
-    }
-
-    public Budget tagMatchMode(TagMatchMode tagMatchMode) {
-        this.setTagMatchMode(tagMatchMode);
-        return this;
-    }
-
-    public void setTagMatchMode(TagMatchMode tagMatchMode) {
-        this.tagMatchMode = tagMatchMode;
-    }
-
-    public BigDecimal getWarningPercentage() {
-        return this.warningPercentage;
-    }
-
-    public Budget warningPercentage(BigDecimal warningPercentage) {
-        this.setWarningPercentage(warningPercentage);
-        return this;
-    }
-
-    public void setWarningPercentage(BigDecimal warningPercentage) {
-        this.warningPercentage = warningPercentage;
+    public String getCreationRequestHash() {
+        return creationRequestHash;
     }
 
     public Instant getCreatedAt() {
-        return this.createdAt;
-    }
-
-    public Budget createdAt(Instant createdAt) {
-        this.setCreatedAt(createdAt);
-        return this;
-    }
-
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
+        return createdAt;
     }
 
     public Instant getUpdatedAt() {
-        return this.updatedAt;
-    }
-
-    public Budget updatedAt(Instant updatedAt) {
-        this.setUpdatedAt(updatedAt);
-        return this;
-    }
-
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
+        return updatedAt;
     }
 
     public User getUser() {
-        return this.user;
+        return user;
     }
 
-    public void setUser(User user) {
-        this.user = user;
-    }
-
-    public Budget user(User user) {
-        this.setUser(user);
-        return this;
-    }
-
-    public Set<FinancialAccount> getAccounts() {
-        return this.accounts;
-    }
-
-    public void setAccounts(Set<FinancialAccount> financialAccounts) {
-        this.accounts = financialAccounts;
-    }
-
-    public Budget accounts(Set<FinancialAccount> financialAccounts) {
-        this.setAccounts(financialAccounts);
-        return this;
-    }
-
-    public Budget addAccounts(FinancialAccount financialAccount) {
-        this.accounts.add(financialAccount);
-        return this;
-    }
-
-    public Budget removeAccounts(FinancialAccount financialAccount) {
-        this.accounts.remove(financialAccount);
-        return this;
-    }
-
-    public Set<Category> getCategories() {
-        return this.categories;
-    }
-
-    public void setCategories(Set<Category> categories) {
-        this.categories = categories;
-    }
-
-    public Budget categories(Set<Category> categories) {
-        this.setCategories(categories);
-        return this;
-    }
-
-    public Budget addCategories(Category category) {
-        this.categories.add(category);
-        return this;
-    }
-
-    public Budget removeCategories(Category category) {
-        this.categories.remove(category);
-        return this;
-    }
-
-    public Set<Tag> getTags() {
-        return this.tags;
-    }
-
-    public void setTags(Set<Tag> tags) {
-        this.tags = tags;
-    }
-
-    public Budget tags(Set<Tag> tags) {
-        this.setTags(tags);
-        return this;
-    }
-
-    public Budget addTags(Tag tag) {
-        this.tags.add(tag);
-        return this;
-    }
-
-    public Budget removeTags(Tag tag) {
-        this.tags.remove(tag);
-        return this;
-    }
-
-    // jhipster-needle-entity-add-getters-setters - JHipster will add getters and setters here
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (!(o instanceof Budget)) {
-            return false;
-        }
-        return getId() != null && getId().equals(((Budget) o).getId());
-    }
-
-    @Override
-    public int hashCode() {
-        // see https://vladmihalcea.com/how-to-implement-equals-and-hashcode-using-the-jpa-entity-identifier/
-        return getClass().hashCode();
-    }
-
-    // prettier-ignore
-    @Override
-    public String toString() {
-        return "Budget{" +
-            "id=" + getId() +
-            ", name='" + getName() + "'" +
-            ", amount=" + getAmount() +
-            ", currency='" + getCurrency() + "'" +
-            ", period='" + getPeriod() + "'" +
-            ", startDate='" + getStartDate() + "'" +
-            ", endDate='" + getEndDate() + "'" +
-            ", status='" + getStatus() + "'" +
-            ", tagMatchMode='" + getTagMatchMode() + "'" +
-            ", warningPercentage=" + getWarningPercentage() +
-            ", createdAt='" + getCreatedAt() + "'" +
-            ", updatedAt='" + getUpdatedAt() + "'" +
-            "}";
+    public List<BudgetRevision> getRevisions() {
+        return List.copyOf(revisions);
     }
 }

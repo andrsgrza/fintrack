@@ -231,6 +231,7 @@ final class SemanticAnalyticsDslParser {
                 List<String> values;
                 if (
                     operator == SemanticPredicateOperator.IN ||
+                    operator == SemanticPredicateOperator.DESCENDANT_OF_ANY ||
                     operator == SemanticPredicateOperator.HAS_ANY ||
                     operator == SemanticPredicateOperator.HAS_ALL
                 ) {

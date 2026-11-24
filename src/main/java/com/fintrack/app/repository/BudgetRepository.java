@@ -1,93 +1,70 @@
 package com.fintrack.app.repository;
 
 import com.fintrack.app.domain.Budget;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-/**
- * Spring Data JPA repository for the Budget entity.
- *
- * When extending this class, extend BudgetRepositoryWithBagRelationships too.
- * For more information refer to https://github.com/jhipster/generator-jhipster/issues/17990.
- */
+/** Persistence boundary for the Budget aggregate, intentionally not a generated CRUD repository. */
 @Repository
-public interface BudgetRepository
-    extends BudgetRepositoryWithBagRelationships, JpaRepository<Budget, Long>, JpaSpecificationExecutor<Budget> {
-    @Query("select budget from Budget budget where budget.user.login = ?#{authentication.name}")
-    List<Budget> findByUserIsCurrentUser();
+public interface BudgetRepository extends JpaRepository<Budget, Long> {
+    /**
+     * Used only after the command service has owner-authorized and removed every Budget-owned dependent row.
+     *
+     * <p>The version predicate closes the time-of-check/time-of-use window between command validation and the final
+     * aggregate deletion. If another command touched the Budget after it was read, this update affects no row and the
+     * enclosing transaction rolls all dependent-row cleanup back.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from Budget budget where budget.id = :budgetId and budget.version = :expectedVersion")
+    int deleteAggregateById(@Param("budgetId") Long budgetId, @Param("expectedVersion") Long expectedVersion);
 
-    default Optional<Budget> findOneWithEagerRelationships(Long id) {
-        return this.fetchBagRelationships(this.findOneWithToOneRelationships(id));
-    }
-
-    default Optional<Budget> findOneWithEagerRelationshipsByIdAndUserLogin(Long id, String login) {
-        return this.fetchBagRelationships(this.findOneWithToOneRelationshipsByIdAndUserLogin(id, login));
-    }
-
-    default List<Budget> findAllWithEagerRelationships() {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationships());
-    }
-
-    default Page<Budget> findAllWithEagerRelationships(Pageable pageable) {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationships(pageable));
-    }
-
-    default Page<Budget> findAllWithEagerRelationshipsByUserLogin(String login, Pageable pageable) {
-        return this.fetchBagRelationships(this.findAllWithToOneRelationshipsByUserLogin(login, pageable));
-    }
-
-    @Query(value = "select budget from Budget budget left join fetch budget.user", countQuery = "select count(budget) from Budget budget")
-    Page<Budget> findAllWithToOneRelationships(Pageable pageable);
-
-    @Query("select budget from Budget budget left join fetch budget.user")
-    List<Budget> findAllWithToOneRelationships();
-
-    @Query("select budget from Budget budget left join fetch budget.user where budget.id =:id")
-    Optional<Budget> findOneWithToOneRelationships(@Param("id") Long id);
-
-    @Query("select budget from Budget budget where budget.id = :id and budget.user.login = :login")
+    @Query("select b from Budget b where b.id = :id and b.user.login = :login")
     Optional<Budget> findOneByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
-    @Query("select budget from Budget budget left join fetch budget.user where budget.id = :id and budget.user.login = :login")
-    Optional<Budget> findOneWithToOneRelationshipsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
-
-    @Query(
-        value = "select budget from Budget budget left join fetch budget.user where budget.user.login = :login",
-        countQuery = "select count(budget) from Budget budget where budget.user.login = :login"
-    )
-    Page<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login, Pageable pageable);
-
-    @Query("select budget from Budget budget left join fetch budget.user where budget.user.login = :login")
-    List<Budget> findAllWithToOneRelationshipsByUserLogin(@Param("login") String login);
+    @Query("select b from Budget b left join fetch b.revisions where b.id = :id and b.user.login = :login")
+    Optional<Budget> findOneWithRevisionsByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
     /**
-     * Fetches every linked account for budgets that contain the target account. The full set is needed because an
-     * empty set broadens a budget to all active accounts.
+     * Read aggregate used by Budget financial evaluation. The immutable revision scopes are fetched with the
+     * authorized root so evaluating a bounded history does not turn into a query per period or per selected item.
      */
     @Query(
-        "select distinct budget from Budget budget left join fetch budget.accounts " +
-        "where budget.id in (select scopedBudget.id from Budget scopedBudget join scopedBudget.accounts scopedAccount where scopedAccount.id = :accountId)"
+        "select distinct b from Budget b join fetch b.user left join fetch b.revisions revision " +
+        "left join fetch revision.accounts left join fetch revision.categories left join fetch revision.tags " +
+        "where b.id = :id and b.user.login = :login"
     )
-    List<Budget> findAllWithAccountsByAccountId(@Param("accountId") Long accountId);
+    Optional<Budget> findOneForEvaluationByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__accounts where budget_id = :budgetId", nativeQuery = true)
-    void deleteAccountLinksByBudgetId(@Param("budgetId") Long budgetId);
+    /** Locks the aggregate root while a scheduled close captures its immutable financial evidence. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query(
+        // PostgreSQL cannot apply FOR UPDATE to the nullable side of collection fetch joins. The capture path
+        // locks only the aggregate root (after its owner), then reads immutable revision history separately.
+        "select b from Budget b join fetch b.user " + "where b.id = :id and b.user.login = :login"
+    )
+    Optional<Budget> findOneForPeriodCloseCaptureByIdAndUserLogin(@Param("id") Long id, @Param("login") String login);
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__accounts where accounts_id = :accountId", nativeQuery = true)
-    void deleteAccountLinksByAccountId(@Param("accountId") Long accountId);
+    /**
+     * Owner-scoped overview read. Scope selections travel with immutable revisions so an overview never needs to
+     * recover them through unscoped entity lookups.
+     */
+    @Query(
+        "select distinct b from Budget b join fetch b.user left join fetch b.revisions revision " +
+        "left join fetch revision.accounts left join fetch revision.categories left join fetch revision.tags " +
+        "where b.user.login = :login order by b.updatedAt desc, b.id desc"
+    )
+    List<Budget> findAllForOverviewByUserLogin(@Param("login") String login);
 
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__categories where budget_id = :budgetId", nativeQuery = true)
-    void deleteCategoryLinksByBudgetId(@Param("budgetId") Long budgetId);
-
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query(value = "delete from rel_budget__tags where budget_id = :budgetId", nativeQuery = true)
-    void deleteTagLinksByBudgetId(@Param("budgetId") Long budgetId);
+    @Query("select b from Budget b left join fetch b.revisions where b.user.login = :login and b.creationRequestId = :requestId")
+    Optional<Budget> findOneWithRevisionsByUserLoginAndCreationRequestId(
+        @Param("login") String login,
+        @Param("requestId") String requestId
+    );
 }

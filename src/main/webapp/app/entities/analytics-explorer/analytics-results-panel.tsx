@@ -786,6 +786,257 @@ const Kpis = ({ panel, locale, compact }: { panel: ResultPanel; locale: string; 
   </div>
 );
 
+const ResultsHeading = ({ locale }: { locale: string }) => (
+  <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
+    <div>
+      <p className="text-uppercase small fw-semibold text-muted mb-1">{copy(locale, 'Resultados', 'Results')}</p>
+      <h2 className="h5 mb-1">{copy(locale, 'Vista previa de la consulta', 'Query preview')}</h2>
+      <p className="small text-muted mb-0">
+        {copy(
+          locale,
+          'Los resultados siempre provienen de la última ejecución explícita.',
+          'Results always come from the last explicit run.',
+        )}
+      </p>
+    </div>
+  </div>
+);
+
+const ResultAvailability = ({
+  result,
+  locale,
+  compact,
+  empty = false,
+}: {
+  result: SemanticAnalyticsResult;
+  locale: string;
+  compact: boolean;
+  empty?: boolean;
+}) => {
+  const AvailabilityElement = empty ? 'p' : 'div';
+  return (
+    <>
+      {result.availability && result.availability !== 'COMPLETE' ? (
+        <AvailabilityElement
+          className={empty ? 'small mb-2' : compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}
+          data-cy="analyticsResultAvailability"
+        >
+          {copy(locale, 'Disponibilidad del resultado', 'Result availability')}: {label(locale, result.availability)}
+        </AvailabilityElement>
+      ) : null}
+      {result.warnings?.map(warning => (
+        <div
+          className={
+            empty
+              ? compact
+                ? 'border-start border-3 border-warning ps-2 mb-0'
+                : 'alert alert-warning py-2 mb-0'
+              : compact
+                ? 'small border-start border-warning border-3 ps-2 mb-2'
+                : 'alert alert-warning py-2'
+          }
+          key={warning.code}
+          data-cy={`analyticsWarning-${warning.code}`}
+        >
+          {warningText(warning.code, warning.message, locale)}
+        </div>
+      ))}
+    </>
+  );
+};
+
+const EmptyResults = ({ result, locale, compact }: { result: SemanticAnalyticsResult; locale: string; compact: boolean }) => (
+  <div
+    className={compact ? 'border-start border-3 border-info ps-2 small text-muted' : 'border rounded-2 p-4 text-muted'}
+    data-cy="analyticsNoData"
+  >
+    <p className="mb-2">
+      {result.availability === 'NOT_APPLICABLE'
+        ? copy(locale, 'Esta consulta no aplica al contexto seleccionado.', 'This query does not apply to the selected context.')
+        : copy(locale, 'No hay datos para este contexto; no equivale a cero.', 'There is no data for this context; this is not zero.')}
+    </p>
+    <ResultAvailability result={result} locale={locale} compact={compact} empty />
+  </div>
+);
+
+const ResultPanels = ({
+  current,
+  panels,
+  definition,
+  result,
+  seriesLimit,
+  locale,
+  compact,
+}: {
+  current: ExplorerVisualization;
+  panels: ResultPanel[];
+  definition: SemanticQueryDefinition | null;
+  result: SemanticAnalyticsResult;
+  seriesLimit: number | 'ALL';
+  locale: string;
+  compact: boolean;
+}) => (
+  <>
+    {panels.map(panel => {
+      const chart = current !== 'KPI';
+      const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext, current) : null;
+      return (
+        <section
+          className={compact ? 'mb-3' : 'border rounded-2 p-3 mb-3'}
+          key={panelKey(panel.currency, panel.unit)}
+          data-cy={`analyticsCurrencyFacet-${panel.currency ?? 'NON_MONETARY'}-${panel.unit}`}
+        >
+          {!compact || current !== 'KPI' ? <h3 className="h6">{panelTitle(panel, locale)}</h3> : null}
+          {current === 'KPI' ? <Kpis panel={panel} locale={locale} compact={compact} /> : null}
+          {chart ? (
+            <SemanticChart
+              panel={panel}
+              visualization={current}
+              seriesLimit={seriesLimit}
+              locale={locale}
+              effectiveContext={result.effectiveContext}
+              horizontal={definition?.groupBy[0] === 'ACCOUNT_ID' && current === 'BAR'}
+            />
+          ) : null}
+          {chartState && chartState.hidden ? (
+            <p className="small text-muted mt-2">
+              {copy(
+                locale,
+                `${chartState.hidden} series no se muestran en la gráfica; la tabla conserva el resultado completo.`,
+                `${chartState.hidden} series are hidden from the chart; the table preserves the complete result.`,
+              )}
+            </p>
+          ) : null}
+        </section>
+      );
+    })}
+  </>
+);
+
+const CompactResultDetails = ({
+  definition,
+  result,
+  locale,
+  onDrillDown,
+}: Pick<Props, 'definition' | 'result' | 'locale' | 'onDrillDown'>) => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
+  if (!result) return null;
+  return (
+    <div className="border-top pt-2">
+      <Button
+        type="button"
+        color="secondary"
+        outline
+        size="sm"
+        aria-expanded={detailsOpen}
+        aria-controls={detailsId}
+        onClick={() => setDetailsOpen(open => !open)}
+        data-cy="analyticsResultDetailsToggle"
+      >
+        {detailsOpen
+          ? copy(locale, 'Ocultar tabla de resultados', 'Hide results table')
+          : copy(locale, 'Ver tabla de resultados', 'View results table')}
+      </Button>
+      <p className="small text-muted mt-2 mb-0">
+        {copy(
+          locale,
+          'La tabla conserva los resultados agrupados; no es una lista de transacciones individuales.',
+          'The table preserves grouped results; it is not a list of individual transactions.',
+        )}
+      </p>
+      {detailsOpen ? (
+        <div id={detailsId} className="mt-2">
+          <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const PopulatedResults = ({
+  definition,
+  result,
+  visualization,
+  current,
+  incompatibility,
+  panels,
+  locale,
+  seriesLimit,
+  drillTrail,
+  onDrillDown,
+  onDrillBack,
+  compact,
+}: {
+  definition: SemanticQueryDefinition | null;
+  result: SemanticAnalyticsResult;
+  visualization: ExplorerVisualization;
+  current: ExplorerVisualization | 'TABLE';
+  incompatibility: string | null | undefined;
+  panels: ResultPanel[];
+  locale: string;
+  seriesLimit: number | 'ALL';
+  drillTrail: string[];
+  onDrillDown: Props['onDrillDown'];
+  onDrillBack: Props['onDrillBack'];
+  compact: boolean;
+}) => (
+  <>
+    {!compact ? (
+      <p className="small text-muted" data-cy="analyticsEffectiveContext">
+        {copy(locale, 'Contexto efectivo', 'Effective context')}: {result.effectiveContext.from} — {result.effectiveContext.through}
+      </p>
+    ) : null}
+    {drillTrail.length ? (
+      <div className="alert alert-info py-2 d-flex justify-content-between gap-2 align-items-center">
+        <span>{copy(locale, `Explorando: ${drillTrail.join(' › ')}`, `Exploring: ${drillTrail.join(' › ')}`)}</span>
+        <Button type="button" size="sm" color="secondary" outline onClick={onDrillBack}>
+          {copy(locale, 'Volver', 'Back')}
+        </Button>
+      </div>
+    ) : null}
+    <ResultAvailability result={result} locale={locale} compact={compact} />
+    {incompatibility ? (
+      <div className="alert alert-warning py-2" data-cy="analyticsVisualizationIncompatibility">
+        {copy(
+          locale,
+          `La presentación “${visualizationTitle(locale, visualization)}” no es compatible con este resultado: ${incompatibility} Se muestra la tabla de resultados sin modificar la consulta guardada.`,
+          `The “${visualizationTitle(locale, visualization)}” presentation is not compatible with this result: ${incompatibility} The result table is shown without changing the saved query.`,
+        )}
+      </div>
+    ) : null}
+    {panels.length > 1 ? (
+      <div className={compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}>
+        {copy(
+          locale,
+          'Los importes se presentan por moneda y unidad; FINTRACK no los mezcla ni convierte.',
+          'Amounts are shown by currency and unit; FINTRACK never mixes or converts them.',
+        )}
+      </div>
+    ) : null}
+    {current === 'TABLE' ? (
+      <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+    ) : null}
+    {current !== 'TABLE' ? (
+      <ResultPanels
+        current={current}
+        panels={panels}
+        definition={definition}
+        result={result}
+        seriesLimit={seriesLimit}
+        locale={locale}
+        compact={compact}
+      />
+    ) : null}
+    {!compact && current !== 'TABLE' ? (
+      <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
+    ) : null}
+    {compact && current !== 'TABLE' ? (
+      <CompactResultDetails definition={definition} result={result} locale={locale} onDrillDown={onDrillDown} />
+    ) : null}
+  </>
+);
+
 /** Presentation adapts only returned semantic results. It never changes the query definition or context. */
 export const AnalyticsResultsPanel = ({
   definition,
@@ -809,26 +1060,10 @@ export const AnalyticsResultsPanel = ({
   // instead of mutating the presentation choice or making its financial result disappear.
   const current = incompatibility ? 'TABLE' : visualization;
   const panels = result ? resultPanels(result) : [];
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const detailsId = useId();
   return (
     <section className={compact ? '' : 'card border shadow-sm'} data-cy="analyticsResults" aria-live="polite">
       <div className={compact ? '' : 'card-body p-3 p-md-4'}>
-        {!compact ? (
-          <div className="d-flex flex-wrap justify-content-between gap-2 align-items-start mb-3">
-            <div>
-              <p className="text-uppercase small fw-semibold text-muted mb-1">{copy(locale, 'Resultados', 'Results')}</p>
-              <h2 className="h5 mb-1">{copy(locale, 'Vista previa de la consulta', 'Query preview')}</h2>
-              <p className="small text-muted mb-0">
-                {copy(
-                  locale,
-                  'Los resultados siempre provienen de la última ejecución explícita.',
-                  'Results always come from the last explicit run.',
-                )}
-              </p>
-            </div>
-          </div>
-        ) : null}
+        {!compact ? <ResultsHeading locale={locale} /> : null}
         {stale ? (
           <div className="alert alert-warning py-2" data-cy="analyticsPreviewStale">
             {copy(
@@ -844,158 +1079,22 @@ export const AnalyticsResultsPanel = ({
             {copy(locale, 'Define una consulta y ejecútala para ver resultados.', 'Define and run a query to see results.')}
           </div>
         ) : null}
-        {!loading && result && !result.rows.length ? (
-          <div
-            className={compact ? 'border-start border-3 border-info ps-2 small text-muted' : 'border rounded-2 p-4 text-muted'}
-            data-cy="analyticsNoData"
-          >
-            <p className="mb-2">
-              {result.availability === 'NOT_APPLICABLE'
-                ? copy(locale, 'Esta consulta no aplica al contexto seleccionado.', 'This query does not apply to the selected context.')
-                : copy(
-                    locale,
-                    'No hay datos para este contexto; no equivale a cero.',
-                    'There is no data for this context; this is not zero.',
-                  )}
-            </p>
-            {result.availability && result.availability !== 'COMPLETE' ? (
-              <p className="small mb-2" data-cy="analyticsResultAvailability">
-                {copy(locale, 'Disponibilidad del resultado', 'Result availability')}: {label(locale, result.availability)}
-              </p>
-            ) : null}
-            {result.warnings?.map(warning => (
-              <div
-                className={compact ? 'border-start border-3 border-warning ps-2 mb-0' : 'alert alert-warning py-2 mb-0'}
-                key={warning.code}
-                data-cy={`analyticsWarning-${warning.code}`}
-              >
-                {warningText(warning.code, warning.message, locale)}
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {!loading && result && !result.rows.length ? <EmptyResults result={result} locale={locale} compact={compact} /> : null}
         {!loading && result?.rows.length ? (
-          <>
-            {!compact ? (
-              <p className="small text-muted" data-cy="analyticsEffectiveContext">
-                {copy(locale, 'Contexto efectivo', 'Effective context')}: {result.effectiveContext.from} — {result.effectiveContext.through}
-              </p>
-            ) : null}
-            {drillTrail.length ? (
-              <div className="alert alert-info py-2 d-flex justify-content-between gap-2 align-items-center">
-                <span>{copy(locale, `Explorando: ${drillTrail.join(' › ')}`, `Exploring: ${drillTrail.join(' › ')}`)}</span>
-                <Button type="button" size="sm" color="secondary" outline onClick={onDrillBack}>
-                  {copy(locale, 'Volver', 'Back')}
-                </Button>
-              </div>
-            ) : null}
-            {result.availability && result.availability !== 'COMPLETE' ? (
-              <div
-                className={compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}
-                data-cy="analyticsResultAvailability"
-              >
-                {copy(locale, 'Disponibilidad del resultado', 'Result availability')}: {label(locale, result.availability)}
-              </div>
-            ) : null}
-            {result.warnings?.map(warning => (
-              <div
-                className={compact ? 'small border-start border-warning border-3 ps-2 mb-2' : 'alert alert-warning py-2'}
-                key={warning.code}
-                data-cy={`analyticsWarning-${warning.code}`}
-              >
-                {warningText(warning.code, warning.message, locale)}
-              </div>
-            ))}
-            {incompatibility ? (
-              <div className="alert alert-warning py-2" data-cy="analyticsVisualizationIncompatibility">
-                {copy(
-                  locale,
-                  `La presentación “${visualizationTitle(locale, visualization)}” no es compatible con este resultado: ${incompatibility} Se muestra la tabla de resultados sin modificar la consulta guardada.`,
-                  `The “${visualizationTitle(locale, visualization)}” presentation is not compatible with this result: ${incompatibility} The result table is shown without changing the saved query.`,
-                )}
-              </div>
-            ) : null}
-            {panels.length > 1 ? (
-              <div className={compact ? 'small border-start border-info border-3 ps-2 mb-2' : 'alert alert-info py-2'}>
-                {copy(
-                  locale,
-                  'Los importes se presentan por moneda y unidad; FINTRACK no los mezcla ni convierte.',
-                  'Amounts are shown by currency and unit; FINTRACK never mixes or converts them.',
-                )}
-              </div>
-            ) : null}
-            {current === 'TABLE' ? (
-              <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
-            ) : null}
-            {current !== 'TABLE'
-              ? panels.map(panel => {
-                  const chart = current !== 'KPI';
-                  const chartState = chart ? chartRows(panel, seriesLimit, locale, result.effectiveContext, current) : null;
-                  return (
-                    <section
-                      className={compact ? 'mb-3' : 'border rounded-2 p-3 mb-3'}
-                      key={panelKey(panel.currency, panel.unit)}
-                      data-cy={`analyticsCurrencyFacet-${panel.currency ?? 'NON_MONETARY'}-${panel.unit}`}
-                    >
-                      {!compact || current !== 'KPI' ? <h3 className="h6">{panelTitle(panel, locale)}</h3> : null}
-                      {current === 'KPI' ? <Kpis panel={panel} locale={locale} compact={compact} /> : null}
-                      {chart ? (
-                        <SemanticChart
-                          panel={panel}
-                          visualization={current}
-                          seriesLimit={seriesLimit}
-                          locale={locale}
-                          effectiveContext={result.effectiveContext}
-                          horizontal={definition?.groupBy[0] === 'ACCOUNT_ID' && current === 'BAR'}
-                        />
-                      ) : null}
-                      {chartState && chartState.hidden ? (
-                        <p className="small text-muted mt-2">
-                          {copy(
-                            locale,
-                            `${chartState.hidden} series no se muestran en la gráfica; la tabla conserva el resultado completo.`,
-                            `${chartState.hidden} series are hidden from the chart; the table preserves the complete result.`,
-                          )}
-                        </p>
-                      ) : null}
-                    </section>
-                  );
-                })
-              : null}
-            {!compact && current !== 'TABLE' ? (
-              <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
-            ) : null}
-            {compact && current !== 'TABLE' ? (
-              <div className="border-top pt-2">
-                <Button
-                  type="button"
-                  color="secondary"
-                  outline
-                  size="sm"
-                  aria-expanded={detailsOpen}
-                  aria-controls={detailsId}
-                  onClick={() => setDetailsOpen(open => !open)}
-                  data-cy="analyticsResultDetailsToggle"
-                >
-                  {detailsOpen
-                    ? copy(locale, 'Ocultar tabla de resultados', 'Hide results table')
-                    : copy(locale, 'Ver tabla de resultados', 'View results table')}
-                </Button>
-                <p className="small text-muted mt-2 mb-0">
-                  {copy(
-                    locale,
-                    'La tabla conserva los resultados agrupados; no es una lista de transacciones individuales.',
-                    'The table preserves grouped results; it is not a list of individual transactions.',
-                  )}
-                </p>
-                {detailsOpen ? (
-                  <div id={detailsId} className="mt-2">
-                    <AnalyticsResultTable definition={definition} rows={result.rows} locale={locale} onDrillDown={onDrillDown} />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </>
+          <PopulatedResults
+            definition={definition}
+            result={result}
+            visualization={visualization}
+            current={current}
+            incompatibility={incompatibility}
+            panels={panels}
+            locale={locale}
+            seriesLimit={seriesLimit}
+            drillTrail={drillTrail}
+            onDrillDown={onDrillDown}
+            onDrillBack={onDrillBack}
+            compact={compact}
+          />
         ) : null}
       </div>
     </section>

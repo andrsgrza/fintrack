@@ -66,7 +66,7 @@ public class Category implements Serializable {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(
-        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions", "budgets" },
+        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions" },
         allowSetters = true
     )
     private Category parentCategory;
@@ -88,7 +88,7 @@ public class Category implements Serializable {
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "parentCategory")
     @JsonIgnoreProperties(
-        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions", "budgets" },
+        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions" },
         allowSetters = true
     )
     private Set<Category> childCategories = new HashSet<>();
@@ -103,10 +103,6 @@ public class Category implements Serializable {
         allowSetters = true
     )
     private Set<FinancialSubscription> subscriptions = new HashSet<>();
-
-    @ManyToMany(fetch = FetchType.LAZY, mappedBy = "categories")
-    @JsonIgnoreProperties(value = { "user", "accounts", "categories", "tags" }, allowSetters = true)
-    private Set<Budget> budgets = new HashSet<>();
 
     // jhipster-needle-entity-add-field - JHipster will add fields here
 
@@ -374,37 +370,6 @@ public class Category implements Serializable {
     public Category removeSubscriptions(FinancialSubscription financialSubscription) {
         this.subscriptions.remove(financialSubscription);
         financialSubscription.setCategory(null);
-        return this;
-    }
-
-    public Set<Budget> getBudgets() {
-        return this.budgets;
-    }
-
-    public void setBudgets(Set<Budget> budgets) {
-        if (this.budgets != null) {
-            this.budgets.forEach(i -> i.removeCategories(this));
-        }
-        if (budgets != null) {
-            budgets.forEach(i -> i.addCategories(this));
-        }
-        this.budgets = budgets;
-    }
-
-    public Category budgets(Set<Budget> budgets) {
-        this.setBudgets(budgets);
-        return this;
-    }
-
-    public Category addBudgets(Budget budget) {
-        this.budgets.add(budget);
-        budget.getCategories().add(this);
-        return this;
-    }
-
-    public Category removeBudgets(Budget budget) {
-        this.budgets.remove(budget);
-        budget.getCategories().remove(this);
         return this;
     }
 

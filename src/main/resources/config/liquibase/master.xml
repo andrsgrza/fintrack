@@ -72,5 +72,11 @@
     <include file="config/liquibase/changelog/20261105110000_personal_dashboard_management.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261105120000_personal_dashboard_official_defaults.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261106100000_personal_dashboard_widget_lifecycle.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261115100000_budget_foundation.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261115110000_budget_revision_scheduling.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261115130000_budget_custom_calendar_rule.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261116100000_budget_notification_engine.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261117100000_budget_notification_preference_activation.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261118090000_budget_period_close_processing.xml" relativeToChangelogFile="false"/>
     <!-- jhipster-needle-liquibase-add-incremental-changelog - JHipster will add incremental liquibase changelogs here -->
 </databaseChangeLog>

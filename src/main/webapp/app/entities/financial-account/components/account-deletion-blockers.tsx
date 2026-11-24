@@ -5,7 +5,6 @@ import { Translate } from 'react-jhipster';
 import { IFinancialAccountDeletionBlocker } from 'app/shared/model/financial-account-deletion-preview.model';
 
 const blockerKeyByCode: Record<Exclude<IFinancialAccountDeletionBlocker['code'], 'CROSS_ACCOUNT_TRANSFER'>, string> = {
-  BUDGET_SCOPE_WOULD_BROADEN: 'fintrackApp.financialAccount.delete.blockers.budgetScopeWouldBroaden',
   RULE_ACCOUNT_CONDITION_REFERENCE: 'fintrackApp.financialAccount.delete.blockers.ruleAccountConditionReference',
   CORRUPT_CANDIDATE: 'fintrackApp.financialAccount.delete.blockers.corruptCandidate',
   CORRUPT_INGESTION_GRAPH: 'fintrackApp.financialAccount.delete.blockers.corruptIngestionGraph',
@@ -14,8 +13,6 @@ const blockerKeyByCode: Record<Exclude<IFinancialAccountDeletionBlocker['code'],
 
 const blockerFallbackByCode: Record<IFinancialAccountDeletionBlocker['code'], string> = {
   CROSS_ACCOUNT_TRANSFER: 'This account participates in a transfer with another account. Resolve that transfer before deleting it.',
-  BUDGET_SCOPE_WOULD_BROADEN:
-    'A budget uses this account as its only specific account. Deleting it would broaden that budget to all active accounts. Edit the budget first.',
   RULE_ACCOUNT_CONDITION_REFERENCE: 'A rule uses this account as a condition. Edit or remove that condition before deleting the account.',
   CORRUPT_CANDIDATE: 'Fintrack detected inconsistent transaction data associated with this account. It cannot be deleted safely.',
   CORRUPT_INGESTION_GRAPH: 'Fintrack detected inconsistent import data associated with this account. It cannot be deleted safely.',

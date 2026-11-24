@@ -63,8 +63,6 @@ public class FinancialAccountDTO implements Serializable {
 
     private UserDTO user;
 
-    private Set<BudgetDTO> budgets = new HashSet<>();
-
     private Set<TransactionIngestionDTO> transactionIngestions = new HashSet<>();
 
     public Long getId() {
@@ -187,14 +185,6 @@ public class FinancialAccountDTO implements Serializable {
         this.user = user;
     }
 
-    public Set<BudgetDTO> getBudgets() {
-        return budgets;
-    }
-
-    public void setBudgets(Set<BudgetDTO> budgets) {
-        this.budgets = budgets;
-    }
-
     public Set<TransactionIngestionDTO> getTransactionIngestions() {
         return transactionIngestions;
     }
@@ -243,7 +233,6 @@ public class FinancialAccountDTO implements Serializable {
             ", createdAt='" + getCreatedAt() + "'" +
             ", updatedAt='" + getUpdatedAt() + "'" +
             ", user=" + getUser() +
-            ", budgets=" + getBudgets() +
             ", transactionIngestions=" + getTransactionIngestions() +
             "}";
     }

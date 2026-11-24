@@ -33,6 +33,22 @@ public class SemanticAnalyticsExecutionService {
 
     public SemanticAnalyticsResult execute(SemanticAnalyticsExecutionRequest request) {
         SemanticAnalyticsExecutionScope scope = validator.validateOrThrow(request);
+        return execute(scope);
+    }
+
+    /**
+     * Narrow server-only path for a trusted aggregate such as Budget. There is intentionally no REST endpoint or
+     * owner-id parameter: the owner comes from {@link SemanticAnalyticsTrustedOwnerContext} built from persistence.
+     */
+    public SemanticAnalyticsResult executeForTrustedOwner(
+        SemanticAnalyticsExecutionRequest request,
+        SemanticAnalyticsTrustedOwnerContext trustedOwner
+    ) {
+        SemanticAnalyticsExecutionScope scope = validator.validateForTrustedOwnerOrThrow(request, trustedOwner);
+        return execute(scope);
+    }
+
+    private SemanticAnalyticsResult execute(SemanticAnalyticsExecutionScope scope) {
         return switch (scope.definition().dataset()) {
             case TRANSACTION_LEDGER -> transactionLedgerExecutor.execute(scope);
             case FINANCIAL_POSITION_SNAPSHOT -> financialPositionExecutor.execute(scope);

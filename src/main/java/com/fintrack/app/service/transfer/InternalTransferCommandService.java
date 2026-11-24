@@ -13,6 +13,7 @@ import com.fintrack.app.repository.FinancialTransactionRepository;
 import com.fintrack.app.repository.InternalTransferRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.service.CurrentUserService;
+import com.fintrack.app.service.budget.BudgetThresholdNotificationService;
 import com.fintrack.app.service.dto.InternalTransferCounterpartCommand;
 import com.fintrack.app.service.dto.InternalTransferCreateCommand;
 import com.fintrack.app.service.dto.InternalTransferLegSelectionCommand;
@@ -57,6 +58,7 @@ public class InternalTransferCommandService {
     private final CurrentUserService currentUserService;
     private final InternalTransferInvariantService invariantService;
     private final EntityManager entityManager;
+    private final BudgetThresholdNotificationService budgetThresholdNotificationService;
 
     public InternalTransferCommandService(
         FinancialAccountRepository financialAccountRepository,
@@ -66,7 +68,8 @@ public class InternalTransferCommandService {
         TagRepository tagRepository,
         CurrentUserService currentUserService,
         InternalTransferInvariantService invariantService,
-        EntityManager entityManager
+        EntityManager entityManager,
+        BudgetThresholdNotificationService budgetThresholdNotificationService
     ) {
         this.financialAccountRepository = financialAccountRepository;
         this.financialTransactionRepository = financialTransactionRepository;
@@ -76,12 +79,27 @@ public class InternalTransferCommandService {
         this.currentUserService = currentUserService;
         this.invariantService = invariantService;
         this.entityManager = entityManager;
+        this.budgetThresholdNotificationService = budgetThresholdNotificationService;
     }
 
     public InternalTransferReadDTO createTransfer(InternalTransferCreateCommand command) {
         if (command == null) {
             throw failure(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
         }
+        return budgetThresholdNotificationService.capture(
+            currentUserService.getCurrentUserLogin(),
+            "INTERNAL_TRANSFER_CREATE",
+            () -> createTransferWithinFinancialMutation(command),
+            result -> String.valueOf(result.getTransferId())
+        );
+    }
+
+    /**
+     * Executes the command without opening a second before/after comparison. Compound financial commands, such as
+     * candidate and Batch publication, call this variant after they have already captured their own complete final
+     * economic state.
+     */
+    public InternalTransferReadDTO createTransferWithinFinancialMutation(InternalTransferCreateCommand command) {
         Map<Long, FinancialAccount> accounts = lockAccounts(command.getSourceAccountId(), command.getDestinationAccountId());
         FinancialAccount sourceAccount = requiredAccount(accounts, command.getSourceAccountId());
         FinancialAccount destinationAccount = requiredAccount(accounts, command.getDestinationAccountId());
@@ -125,6 +143,16 @@ public class InternalTransferCommandService {
         if (command == null) {
             throw failure(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
         }
+        return budgetThresholdNotificationService.capture(
+            currentUserService.getCurrentUserLogin(),
+            "INTERNAL_TRANSFER_LINK",
+            () -> linkExistingTransactionsWithinFinancialMutation(command),
+            result -> String.valueOf(result.getTransferId())
+        );
+    }
+
+    /** See {@link #createTransferWithinFinancialMutation(InternalTransferCreateCommand)}. */
+    public InternalTransferReadDTO linkExistingTransactionsWithinFinancialMutation(InternalTransferLinkCommand command) {
         FinancialTransaction outgoingSnapshot = findAccessibleTransaction(command.getOutgoingTransactionId());
         FinancialTransaction incomingSnapshot = findAccessibleTransaction(command.getIncomingTransactionId());
         Map<Long, FinancialAccount> accounts = lockAccounts(outgoingSnapshot.getAccount().getId(), incomingSnapshot.getAccount().getId());
@@ -144,6 +172,19 @@ public class InternalTransferCommandService {
         if (command == null) {
             throw failure(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
         }
+        return budgetThresholdNotificationService.capture(
+            currentUserService.getCurrentUserLogin(),
+            "INTERNAL_TRANSFER_COUNTERPART_CREATE",
+            () -> createCounterpartForTransactionWithinFinancialMutation(existingTransactionId, command),
+            result -> String.valueOf(result.getTransferId())
+        );
+    }
+
+    /** See {@link #createTransferWithinFinancialMutation(InternalTransferCreateCommand)}. */
+    public InternalTransferReadDTO createCounterpartForTransactionWithinFinancialMutation(
+        Long existingTransactionId,
+        InternalTransferCounterpartCommand command
+    ) {
         FinancialTransaction existingSnapshot = findAccessibleTransaction(existingTransactionId);
         Map<Long, FinancialAccount> accounts = lockAccounts(existingSnapshot.getAccount().getId(), command.getTargetAccountId());
         FinancialTransaction existing = requiredTransaction(lockTransactions(existingTransactionId), existingTransactionId);
@@ -182,6 +223,16 @@ public class InternalTransferCommandService {
         if (command == null) {
             throw failure(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
         }
+        return budgetThresholdNotificationService.capture(
+            currentUserService.getCurrentUserLogin(),
+            "INTERNAL_TRANSFER_UPDATE",
+            () -> updateTransferWithinFinancialMutation(transferId, command),
+            result -> String.valueOf(result.getTransferId())
+        );
+    }
+
+    /** See {@link #createTransferWithinFinancialMutation(InternalTransferCreateCommand)}. */
+    public InternalTransferReadDTO updateTransferWithinFinancialMutation(Long transferId, InternalTransferUpdateCommand command) {
         InternalTransfer snapshot = findAccessibleTransfer(transferId);
         lockAccounts(snapshot.getOutgoingTransaction().getAccount().getId(), snapshot.getIncomingTransaction().getAccount().getId());
         Map<Long, FinancialTransaction> legs = lockTransactions(
@@ -236,6 +287,16 @@ public class InternalTransferCommandService {
         if (command == null) {
             throw failure(InternalTransferErrorCode.TRANSFER_INVALID_REQUEST);
         }
+        return budgetThresholdNotificationService.capture(
+            currentUserService.getCurrentUserLogin(),
+            "INTERNAL_TRANSFER_UNLINK",
+            () -> unlinkTransferWithinFinancialMutation(transferId, command),
+            result -> String.valueOf(result.getTransferId())
+        );
+    }
+
+    /** See {@link #createTransferWithinFinancialMutation(InternalTransferCreateCommand)}. */
+    public InternalTransferReadDTO unlinkTransferWithinFinancialMutation(Long transferId, InternalTransferUnlinkCommand command) {
         InternalTransfer snapshot = findAccessibleTransfer(transferId);
         lockAccounts(snapshot.getOutgoingTransaction().getAccount().getId(), snapshot.getIncomingTransaction().getAccount().getId());
         lockTransactions(snapshot.getOutgoingTransaction().getId(), snapshot.getIncomingTransaction().getId());

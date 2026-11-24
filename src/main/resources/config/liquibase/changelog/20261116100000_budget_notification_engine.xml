@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261116100000-1-user-time-zone" author="fintrack">
+        <addColumn tableName="jhi_user">
+            <column name="time_zone" type="varchar(64)"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="20261116100000-2-budget-notification-preferences" author="fintrack">
+        <createTable tableName="budget_time_zone_assignment" remarks="Immutable per-Budget effective-period IANA time-zone history.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="time_zone" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="effective_period_start" type="date"><constraints nullable="false"/></column>
+            <column name="recorded_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_time_zone_assignment" baseColumnNames="budget_id" constraintName="fk_budget_time_zone_assignment__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="budget_time_zone_assignment" columnNames="budget_id,effective_period_start" constraintName="ux_budget_time_zone_effective"/>
+
+        <createTable tableName="budget_notification_preference" remarks="Optional mutable Budget notification preferences; intentionally independent from immutable revisions.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="version" type="bigint"><constraints nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false" unique="true"/></column>
+            <column name="percentage_alerts_enabled" type="boolean"><constraints nullable="false"/></column>
+            <column name="period_close_enabled" type="boolean"><constraints nullable="false"/></column>
+            <column name="updated_at" type="${datetimeType}"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_notification_preference" baseColumnNames="budget_id" constraintName="fk_budget_notification_preference__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <createIndex tableName="budget_notification_preference" indexName="ix_budget_notification_preference_budget"><column name="budget_id"/></createIndex>
+
+        <createTable tableName="budget_notification_threshold" remarks="Normalized percentage thresholds for one optional Budget preference.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="preference_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="normalized_percentage" type="numeric(19,4)"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_notification_threshold" baseColumnNames="preference_id" constraintName="fk_budget_notification_threshold__preference" referencedTableName="budget_notification_preference" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="budget_notification_threshold" columnNames="preference_id,normalized_percentage" constraintName="ux_budget_notification_threshold"/>
+    </changeSet>
+
+    <changeSet id="20261116100000-3-budget-notification-evidence" author="fintrack">
+        <createTable tableName="budget_threshold_claim" remarks="Permanent per-Budget-period threshold deduplication evidence.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="period_start" type="date"><constraints nullable="false"/></column>
+            <column name="normalized_percentage" type="numeric(19,4)"><constraints nullable="false"/></column>
+            <column name="claimed_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="source_mutation_key" type="varchar(200)"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_threshold_claim" baseColumnNames="budget_id" constraintName="fk_budget_threshold_claim__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="budget_threshold_claim" columnNames="budget_id,period_start,normalized_percentage" constraintName="ux_budget_threshold_claim"/>
+        <createIndex tableName="budget_threshold_claim" indexName="ix_budget_threshold_claim_budget_period"><column name="budget_id"/><column name="period_start"/></createIndex>
+
+        <createTable tableName="budget_notification_outbox" remarks="Immutable notification evidence committed atomically with financial mutations.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="source_mutation_key" type="varchar(200)"><constraints nullable="false"/></column>
+            <column name="snapshot_json" type="${clobType}"><constraints nullable="false"/></column>
+            <column name="event_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="state" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="attempt_count" type="int"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="last_error" type="varchar(1000)"/>
+            <column name="materialized_at" type="${datetimeType}"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_notification_outbox" baseColumnNames="user_id" constraintName="fk_budget_notification_outbox__user" referencedTableName="jhi_user" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_notification_outbox" baseColumnNames="budget_id" constraintName="fk_budget_notification_outbox__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <createIndex tableName="budget_notification_outbox" indexName="ix_budget_notification_outbox_pending"><column name="state"/><column name="next_attempt_at"/><column name="event_at"/><column name="id"/></createIndex>
+        <createIndex tableName="budget_notification_outbox" indexName="ix_budget_notification_outbox_owner_budget"><column name="user_id"/><column name="budget_id"/><column name="event_at"/><column name="id"/></createIndex>
+
+        <createTable tableName="budget_notification" remarks="User-owned immutable notification materialized from one outbox event.">
+            <column name="id" type="bigint"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="user_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="budget_id" type="bigint"><constraints nullable="false"/></column>
+            <column name="outbox_event_id" type="bigint"><constraints nullable="false" unique="true"/></column>
+            <column name="notification_type" type="varchar(40)"><constraints nullable="false"/></column>
+            <column name="snapshot_json" type="${clobType}"><constraints nullable="false"/></column>
+            <column name="event_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="materialized_at" type="${datetimeType}"><constraints nullable="false"/></column>
+            <column name="read_at" type="${datetimeType}"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="budget_notification" baseColumnNames="user_id" constraintName="fk_budget_notification__user" referencedTableName="jhi_user" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_notification" baseColumnNames="budget_id" constraintName="fk_budget_notification__budget" referencedTableName="budget" referencedColumnNames="id"/>
+        <addForeignKeyConstraint baseTableName="budget_notification" baseColumnNames="outbox_event_id" constraintName="fk_budget_notification__outbox" referencedTableName="budget_notification_outbox" referencedColumnNames="id"/>
+        <addUniqueConstraint tableName="budget_notification" columnNames="outbox_event_id" constraintName="ux_budget_notification_outbox"/>
+        <createIndex tableName="budget_notification" indexName="ix_budget_notification_owner_read"><column name="user_id"/><column name="read_at"/><column name="event_at"/><column name="id"/></createIndex>
+    </changeSet>
+</databaseChangeLog>

@@ -170,7 +170,9 @@ flowchart TB
 
 ---
 
-## 5. Budget (Pattern A + M2M)
+## 5. Budget — historical V1 contract (superseded)
+
+> **Superseded by [BUDGET-2](BUDGET-2.md).** The list/GET/PUT/PATCH/DELETE flow below is historical. The live boundary is owner-scoped Budget commands: creation, immutable revision scheduling, lifecycle events and read-only history; selected resources are resolved against that owner.
 
 **Dueño:** `user` directo. Links M2M: `accounts`, `categories`, `tags`.
 

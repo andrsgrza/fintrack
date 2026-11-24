@@ -23,6 +23,7 @@ public class SemanticAnalyticsCatalogService {
         SemanticPredicateOperator.EQUALS,
         SemanticPredicateOperator.IN,
         SemanticPredicateOperator.DESCENDANT_OF,
+        SemanticPredicateOperator.DESCENDANT_OF_ANY,
         SemanticPredicateOperator.IS_UNCATEGORIZED
     );
 

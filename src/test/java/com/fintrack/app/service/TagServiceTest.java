@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fintrack.app.domain.Tag;
 import com.fintrack.app.domain.User;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.TagRepository;
 import com.fintrack.app.repository.TransactionCandidateRepository;
 import com.fintrack.app.service.dto.TagDTO;
@@ -39,6 +40,9 @@ class TagServiceTest {
 
     @Mock
     private TagRepository tagRepository;
+
+    @Mock
+    private BudgetRevisionRepository budgetRevisionRepository;
 
     @Mock
     private TagMapper tagMapper;
@@ -313,7 +317,7 @@ class TagServiceTest {
         verify(tagRepository).deleteFinancialTransactionTagLinksByTagId(10L);
         verify(tagRepository).deleteTransactionRuleResultingTagLinksByTagId(10L);
         verify(tagRepository).deleteFinancialSubscriptionTagLinksByTagId(10L);
-        verify(tagRepository).deleteBudgetTagLinksByTagId(10L);
+        verify(budgetRevisionRepository).deleteTagLinksByTagId(10L);
         verify(tagRepository).deleteById(10L);
     }
 

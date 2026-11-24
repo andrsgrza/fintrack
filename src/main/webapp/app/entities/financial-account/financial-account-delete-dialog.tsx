@@ -238,8 +238,8 @@ export const FinancialAccountDeleteDialog = () => {
           </h3>
           <p className="text-muted mb-0">
             <Translate contentKey="fintrackApp.financialAccount.delete.preserves.copy">
-              Your categories and tags are not deleted. Budgets, subscriptions, and rules are preserved; anything requiring your attention
-              before deletion appears below.
+              Your categories and tags are not deleted. Budget selections, subscriptions, and rules are preserved; anything requiring your
+              attention before deletion appears below.
             </Translate>
           </p>
         </section>

@@ -1,6 +1,5 @@
 import dayjs from 'dayjs';
 import { IUser } from 'app/shared/model/user.model';
-import { IBudget } from 'app/shared/model/budget.model';
 import { ITransactionIngestion } from 'app/shared/model/transaction-ingestion.model';
 import { AccountType } from 'app/shared/model/enumerations/account-type.model';
 import { CurrencyCode } from 'app/shared/model/enumerations/currency-code.model';
@@ -21,7 +20,6 @@ export interface IFinancialAccount {
   createdAt?: dayjs.Dayjs;
   updatedAt?: dayjs.Dayjs;
   user?: IUser;
-  budgets?: IBudget[] | null;
   transactionIngestions?: ITransactionIngestion[] | null;
 }
 

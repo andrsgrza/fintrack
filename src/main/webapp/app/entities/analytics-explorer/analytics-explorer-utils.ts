@@ -60,6 +60,7 @@ const translations: Record<string, Translation> = {
   EQUALS: { es: 'Es igual a', en: 'Equals' },
   IN: { es: 'Es uno de', en: 'Is one of' },
   DESCENDANT_OF: { es: 'Está dentro de', en: 'Is within' },
+  DESCENDANT_OF_ANY: { es: 'Está dentro de cualquiera de', en: 'Is within any of' },
   IS_UNCATEGORIZED: { es: 'No tiene categoría', en: 'Has no category' },
   HAS_ANY: { es: 'Tiene alguna de', en: 'Has any of' },
   HAS_ALL: { es: 'Tiene todas', en: 'Has all' },

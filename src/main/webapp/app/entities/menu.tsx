@@ -35,9 +35,6 @@ const EntitiesMenu = () => {
       <MenuItem icon="asterisk" to="/financial-subscription">
         <Translate contentKey="global.menu.entities.financialSubscription" />
       </MenuItem>
-      <MenuItem icon="asterisk" to="/budget">
-        <Translate contentKey="global.menu.entities.budget" />
-      </MenuItem>
       <MenuItem icon="asterisk" to="/internal-transfers">
         <Translate contentKey="global.menu.entities.internalTransfer" />
       </MenuItem>
@@ -46,6 +43,9 @@ const EntitiesMenu = () => {
       </MenuItem>
       <MenuItem icon="chart-line" to="/analytics/dashboards">
         Dashboards
+      </MenuItem>
+      <MenuItem icon="wallet" to="/budgets">
+        <Translate contentKey="global.menu.entities.budget" />
       </MenuItem>
       <MenuItem icon="asterisk" to="/api-ingestion">
         <Translate contentKey="global.menu.entities.apiIngestion" />{' '}

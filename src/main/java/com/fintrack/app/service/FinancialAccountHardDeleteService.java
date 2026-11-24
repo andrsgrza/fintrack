@@ -1,6 +1,5 @@
 package com.fintrack.app.service;
 
-import com.fintrack.app.domain.Budget;
 import com.fintrack.app.domain.FinancialAccount;
 import com.fintrack.app.domain.FinancialTransaction;
 import com.fintrack.app.domain.InternalTransfer;
@@ -12,7 +11,7 @@ import com.fintrack.app.domain.enumeration.TransactionCandidateSource;
 import com.fintrack.app.domain.enumeration.TransactionCandidateStatus;
 import com.fintrack.app.domain.enumeration.TransactionRuleField;
 import com.fintrack.app.repository.ApiIngestionRepository;
-import com.fintrack.app.repository.BudgetRepository;
+import com.fintrack.app.repository.BudgetRevisionRepository;
 import com.fintrack.app.repository.CreditAccountDetailsRepository;
 import com.fintrack.app.repository.FinancialAccountRepository;
 import com.fintrack.app.repository.FinancialSubscriptionRepository;
@@ -55,9 +54,10 @@ public class FinancialAccountHardDeleteService {
     private final TransactionIngestionRepository transactionIngestionRepository;
     private final InternalTransferRepository internalTransferRepository;
     private final CreditAccountDetailsRepository creditAccountDetailsRepository;
-    private final BudgetRepository budgetRepository;
+    private final BudgetRevisionRepository budgetRevisionRepository;
     private final FinancialSubscriptionRepository financialSubscriptionRepository;
     private final TransactionRuleConditionRepository transactionRuleConditionRepository;
+    private final FinancialTransactionService financialTransactionService;
     private final CurrentUserService currentUserService;
 
     public FinancialAccountHardDeleteService(
@@ -69,9 +69,10 @@ public class FinancialAccountHardDeleteService {
         TransactionIngestionRepository transactionIngestionRepository,
         InternalTransferRepository internalTransferRepository,
         CreditAccountDetailsRepository creditAccountDetailsRepository,
-        BudgetRepository budgetRepository,
+        BudgetRevisionRepository budgetRevisionRepository,
         FinancialSubscriptionRepository financialSubscriptionRepository,
         TransactionRuleConditionRepository transactionRuleConditionRepository,
+        FinancialTransactionService financialTransactionService,
         CurrentUserService currentUserService
     ) {
         this.financialAccountRepository = financialAccountRepository;
@@ -82,9 +83,10 @@ public class FinancialAccountHardDeleteService {
         this.transactionIngestionRepository = transactionIngestionRepository;
         this.internalTransferRepository = internalTransferRepository;
         this.creditAccountDetailsRepository = creditAccountDetailsRepository;
-        this.budgetRepository = budgetRepository;
+        this.budgetRevisionRepository = budgetRevisionRepository;
         this.financialSubscriptionRepository = financialSubscriptionRepository;
         this.transactionRuleConditionRepository = transactionRuleConditionRepository;
+        this.financialTransactionService = financialTransactionService;
         this.currentUserService = currentUserService;
     }
 
@@ -123,7 +125,7 @@ public class FinancialAccountHardDeleteService {
         List<TransactionCandidate> candidates = transactionCandidateRepository.findAllForAccountDeletionPreview(accountId);
         List<TransactionIngestion> ingestions = transactionIngestionRepository.findAllForAccountDeletionPreview(accountId);
         List<InternalTransfer> transfers = internalTransferRepository.findAllForAccountDeletionPreview(accountId);
-        List<Budget> budgets = budgetRepository.findAllWithAccountsByAccountId(accountId);
+        long budgetLinks = budgetRevisionRepository.countAccountLinksByAccountId(accountId);
         List<TransactionRuleCondition> accountConditions = account.getUser() == null || account.getUser().getId() == null
             ? List.of()
             : transactionRuleConditionRepository.findAllAccountConditionsByRuleUserId(
@@ -135,7 +137,6 @@ public class FinancialAccountHardDeleteService {
         validateFinancialTransactions(account, financialTransactions, blockers);
         validateCandidates(account, candidates, blockers);
         validateTransfers(account, transfers, blockers);
-        validateBudgetScope(budgets, blockers);
         List<TransactionRuleCondition> ruleReferences = accountConditions
             .stream()
             .filter(condition -> referencesAccount(condition, accountId))
@@ -156,7 +157,7 @@ public class FinancialAccountHardDeleteService {
             candidates.stream().filter(candidate -> candidate.getSource() == TransactionCandidateSource.FILE_IMPORT).count()
         );
         counts.setCreditAccountDetails(creditAccountDetailsRepository.countByAccountId(accountId));
-        counts.setBudgetLinks((long) budgets.size());
+        counts.setBudgetLinks(budgetLinks);
         counts.setSubscriptions(financialSubscriptionRepository.countByAccountId(accountId));
         counts.setCrossAccountTransfers(transfers.stream().filter(transfer -> isCrossAccountTransfer(transfer, account)).count());
         counts.setRuleAccountReferences((long) ruleReferences.size());
@@ -274,14 +275,6 @@ public class FinancialAccountHardDeleteService {
         }
     }
 
-    private void validateBudgetScope(List<Budget> budgets, Map<FinancialAccountDeletionBlockerCode, Set<Long>> blockers) {
-        for (Budget budget : budgets) {
-            if (budget.getAccounts().size() <= 1) {
-                addBlocker(blockers, FinancialAccountDeletionBlockerCode.BUDGET_SCOPE_WOULD_BROADEN, budget.getId());
-            }
-        }
-    }
-
     private boolean isCrossAccountTransfer(InternalTransfer transfer, FinancialAccount account) {
         if (transfer.getOutgoingTransaction() == null || transfer.getIncomingTransaction() == null) {
             return true;
@@ -336,12 +329,14 @@ public class FinancialAccountHardDeleteService {
         transactionCandidateRepository.deleteByAccountId(accountId);
         transactionBatchRepository.deleteByAccountId(accountId);
 
-        financialTransactionRepository.deleteTagLinksByAccountId(accountId);
-        financialTransactionRepository.deleteByAccountId(accountId);
+        // Reuse the ledger deletion boundary so an otherwise eligible active-period mutation is compared through
+        // the canonical Budget evaluation before its financial rows disappear. This stays inside the hard-delete
+        // transaction; a later failure rolls both the account aggregate and any notification work back together.
+        financialTransactionService.deleteAllForAccount(account);
         transactionIngestionRepository.deleteByAccountId(accountId);
 
         // Shared entities survive; only their target-account relationship is removed.
-        budgetRepository.deleteAccountLinksByAccountId(accountId);
+        budgetRevisionRepository.deleteAccountLinksByAccountId(accountId);
         financialSubscriptionRepository.clearAccountByAccountId(accountId);
         creditAccountDetailsRepository.deleteByAccountId(accountId);
         financialAccountRepository.deleteById(accountId);

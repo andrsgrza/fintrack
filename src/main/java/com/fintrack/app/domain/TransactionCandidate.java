@@ -201,14 +201,14 @@ public class TransactionCandidate implements Serializable {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(
-        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "transactionIngestions", "budgets" },
+        value = { "user", "creditAccountDetails", "financialTransactions", "subscriptions", "transactionIngestions" },
         allowSetters = true
     )
     private FinancialAccount account;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JsonIgnoreProperties(
-        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions", "budgets" },
+        value = { "user", "parentCategory", "financialTransactions", "childCategories", "transactionRules", "subscriptions" },
         allowSetters = true
     )
     private Category category;

@@ -7,6 +7,7 @@ import { languages, locales } from 'app/config/translation';
 import { useAppDispatch, useAppSelector } from 'app/config/store';
 import { getSession } from 'app/shared/reducers/authentication';
 import { reset, saveAccountSettings } from './settings.reducer';
+import { BudgetTimeZoneSettings } from './budget-time-zone-settings';
 
 export const SettingsPage = () => {
   const dispatch = useAppDispatch();
@@ -93,6 +94,7 @@ export const SettingsPage = () => {
               <Translate contentKey="settings.form.button">Save</Translate>
             </Button>
           </ValidatedForm>
+          <BudgetTimeZoneSettings locale={account.langKey || 'en'} />
         </Col>
       </Row>
     </div>
